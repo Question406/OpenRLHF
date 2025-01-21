@@ -1,19 +1,22 @@
 set -x
+   # --reward_pretrain OpenRLHF/Llama-3-8b-rm-mixture \
+# OpenRLHF/Llama-3-8b-sft-mixture
+# export CUDA_VISIBLE_DEVICES=5
 
 read -r -d '' training_commands <<EOF
 openrlhf.cli.train_ppo \
-   --pretrain OpenRLHF/Llama-3-8b-sft-mixture \
-   --reward_pretrain OpenRLHF/Llama-3-8b-rm-mixture \
+   --pretrain Qwen/Qwen2-0.5B-Instruct \
    --save_path ./checkpoint/llama-3-8b-rlhf \
    --save_steps -1 \
    --logging_steps 1 \
    --eval_steps -1 \
    --micro_train_batch_size 2 \
-   --train_batch_size 8 \
+   --train_batch_size 16 \
    --micro_rollout_batch_size 4 \
-   --rollout_batch_size 8 \
+   --rollout_batch_size 16 \
    --max_epochs 1 \
    --prompt_max_len 1024 \
+   --advantage_estimator reinforce \
    --generate_max_len 1024 \
    --zero_stage 2 \
    --bf16 \
@@ -36,5 +39,5 @@ EOF
     # --remote_rm_url http://localhost:5000/get_reward
 
 if [[ ${1} != "slurm" ]]; then
-    deepspeed --module $training_commands
+   deepspeed --include localhost:5 --module $training_commands
 fi

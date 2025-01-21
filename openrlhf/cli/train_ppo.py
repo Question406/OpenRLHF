@@ -53,18 +53,21 @@ def train(args):
         )
     else:
         critic = None
-
+    
     if not args.remote_rm_url:
-        reward_model = get_llm_for_sequence_regression(
-            args.reward_pretrain,
-            "reward",
-            normalize_reward=args.normalize_reward,
-            use_flash_attention_2=args.flash_attn,
-            bf16=args.bf16,
-            load_in_4bit=args.load_in_4bit,
-            ds_config=strategy.get_ds_train_config(is_actor=False),
-            value_head_prefix=args.value_head_prefix,
-        )
+        if args.reward_pretrain:
+            reward_model = get_llm_for_sequence_regression(
+                args.reward_pretrain,
+                "reward",
+                normalize_reward=args.normalize_reward,
+                use_flash_attention_2=args.flash_attn,
+                bf16=args.bf16,
+                load_in_4bit=args.load_in_4bit,
+                ds_config=strategy.get_ds_train_config(is_actor=False),
+                value_head_prefix=args.value_head_prefix,
+            )
+        else:
+            reward_model = None
     else:
         reward_model = None
 
@@ -436,8 +439,8 @@ if __name__ == "__main__":
 
     if args.input_template and "\\n" in args.input_template:
         print(
-            "[Warning] input_template contains \\n chracters instead of newline. "
-            "You likely want to pass $'\\n' in Bash or \"`n\" in PowerShell."
+            "[Warning] input_template contains \\n chrracters instead of newline. "
+            "You likely want to pass $'\\n' in Bash o \"`n\" in PowerShell."
         )
 
     train(args)

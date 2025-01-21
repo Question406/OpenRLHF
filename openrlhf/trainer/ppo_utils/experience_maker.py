@@ -180,6 +180,10 @@ class NaiveExperienceMaker(ABC):
         # generate responses
         samples_list = self.generate_samples(all_prompts, **generate_kwargs)
         torch.distributed.barrier()
+        import ipdb
+
+        ipdb.set_trace()
+
 
         experiences = []
         for samples in tqdm(
@@ -248,7 +252,7 @@ class NaiveExperienceMaker(ABC):
         # sample multiple response
         all_prompts = sum([[prompt] * args.n_samples_per_prompt for prompt in all_prompts], [])
         samples_list = []
-        for i in range(0, len(all_prompts), args.micro_rollout_batch_size):
+        for i in tqdm(range(0, len(all_prompts), args.micro_rollout_batch_size), desc="Sampling", disable=not self.strategy.is_rank_0()):
             prompts = all_prompts[i : i + args.micro_rollout_batch_size]
             inputs = self.tokenize_fn(prompts, self.prompt_max_len, device="cuda")
             sequences, attention_mask, action_mask = self.actor.generate(**inputs, **generate_kwargs)
@@ -262,6 +266,7 @@ class NaiveExperienceMaker(ABC):
                 total_length=attention_mask.float().sum(dim=-1),
             )
             samples_list.append(samples)
+            print("Done sampling one")
         return samples_list
 
     @torch.no_grad()
@@ -302,6 +307,8 @@ class NaiveExperienceMaker(ABC):
         else:
             # local RM
             r = self.reward_model(sequences, attention_mask)
+
+        # TODO: ADD rule based reward here
 
         kl = compute_approx_kl(
             action_log_probs,
