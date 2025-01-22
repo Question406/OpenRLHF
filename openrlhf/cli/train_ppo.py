@@ -12,6 +12,8 @@ from openrlhf.models import Actor, get_llm_for_sequence_regression
 from openrlhf.trainer import PPOTrainer
 from openrlhf.utils import blending_datasets, get_strategy, get_tokenizer
 
+def math_verifiable_reward():
+    pass
 
 def train(args):
     # configure strategy
@@ -267,6 +269,7 @@ def train(args):
         remote_rm_url=args.remote_rm_url,
         save_hf_ckpt=args.save_hf_ckpt,
         disable_ds_ckpt=args.disable_ds_ckpt,
+        use_verifiable_reward=args.verifiable_reward,
     )
 
     trainer.fit(args, prompts_dataloader, pretrain_dataloader, consumed_samples, num_update_steps_per_episodes)
@@ -342,6 +345,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--adam_betas", type=float, nargs=2, default=(0.9, 0.95), help="Betas for Adam optimizer")
     parser.add_argument("--reward_clip_range", type=float, nargs=2, default=(-10, 10), help="Reward clip range")
+    parser.add_argument('--verifiable_reward', action="store_true", default=False, help='Use verifiable reward for coding/math')
 
     # DeepSpeed
     parser.add_argument("--seed", type=int, default=42)

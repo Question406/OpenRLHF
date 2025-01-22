@@ -88,6 +88,7 @@ class PPOTrainer(ABC):
         reward_fn: Callable[[List[torch.Tensor]], torch.Tensor] = None,
         save_hf_ckpt: bool = False,
         disable_ds_ckpt: bool = False,
+        use_verifiable_reward: bool = False,
         **generate_kwargs,
     ) -> None:
         assert (
@@ -149,6 +150,7 @@ class PPOTrainer(ABC):
             strategy,
             remote_rm_url,
             reward_fn,
+            use_verifiable_reward=use_verifiable_reward,
         )
         packing_samples = getattr(self.args, "packing_samples", False)
         self.replay_buffer = NaiveReplayBuffer(

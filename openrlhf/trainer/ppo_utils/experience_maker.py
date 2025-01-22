@@ -14,6 +14,8 @@ from openrlhf.models.utils import compute_approx_kl, compute_reward, masked_mean
 from openrlhf.utils.logging_utils import init_logger
 from openrlhf.utils.remote_rm_utils import remote_rm_fn, remote_rm_fn_ray
 
+from openrlhf.trainer.reward_fns import combined_reward
+
 logger = init_logger(__name__)
 
 
@@ -132,6 +134,7 @@ class NaiveExperienceMaker(ABC):
         strategy=None,
         remote_rm_url: str = None,
         reward_fn=None,
+        use_verifiable_reward=False,
     ) -> None:
         super().__init__()
         self.actor = actor
@@ -146,6 +149,7 @@ class NaiveExperienceMaker(ABC):
         self.reward_fn = reward_fn
         self.perf_stats = None
         self.advantage_estimator = strategy.args.advantage_estimator
+        self.use_verifiable_reward = use_verifiable_reward
 
     # tokenizer
     def tokenize_fn(self, texts, max_length, padding=True, device=None):
@@ -180,10 +184,6 @@ class NaiveExperienceMaker(ABC):
         # generate responses
         samples_list = self.generate_samples(all_prompts, **generate_kwargs)
         torch.distributed.barrier()
-        import ipdb
-
-        ipdb.set_trace()
-
 
         experiences = []
         for samples in tqdm(
@@ -300,15 +300,24 @@ class NaiveExperienceMaker(ABC):
             value = None
 
         # rewards
-        if self.remote_rm_url is not None:
-            # remote RM
-            queries = self.tokenizer.batch_decode(sequences.cpu(), skip_special_tokens=False)
-            r = remote_rm_fn(self.remote_rm_url, queries=queries).to(device=action_log_probs.device)
+        if not self.use_verifiable_reward:
+            import ipdb; ipdb.set_trace()
+            if self.remote_rm_url is not None:
+                # remote RM
+                queries = self.tokenizer.batch_decode(sequences.cpu(), skip_special_tokens=False)
+                r = remote_rm_fn(self.remote_rm_url, queries=queries).to(device=action_log_probs.device)
+            else:
+                # local RM
+                r = self.reward_model(sequences, attention_mask)
         else:
-            # local RM
-            r = self.reward_model(sequences, attention_mask)
+            #* Rule based reward here
+            queries = self.tokenizer.batch_decode(
+                sequences.cpu(), skip_special_tokens=False
+            )
+            r = combined_reward(
+                queries, sequences, attention_mask
+            )
 
-        # TODO: ADD rule based reward here
 
         kl = compute_approx_kl(
             action_log_probs,
