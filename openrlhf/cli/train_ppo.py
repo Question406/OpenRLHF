@@ -7,13 +7,11 @@ from datetime import datetime
 import torch
 from transformers.trainer import get_scheduler
 
-from openrlhf.datasets import PromptDataset, SFTDataset
+from openrlhf.datasets import PromptDataset, SFTDataset, PromptDatasetWithGT
 from openrlhf.models import Actor, get_llm_for_sequence_regression
 from openrlhf.trainer import PPOTrainer
 from openrlhf.utils import blending_datasets, get_strategy, get_tokenizer
 
-def math_verifiable_reward():
-    pass
 
 def train(args):
     # configure strategy
@@ -55,7 +53,7 @@ def train(args):
         )
     else:
         critic = None
-    
+
     if not args.remote_rm_url:
         if args.reward_pretrain:
             reward_model = get_llm_for_sequence_regression(
@@ -135,7 +133,10 @@ def train(args):
         train_split=args.prompt_split,
     )
     prompts_data = prompts_data.select(range(min(args.max_samples, len(prompts_data))))
-    prompts_dataset = PromptDataset(prompts_data, tokenizer, strategy, input_template=args.input_template)
+    if args.use_verifiable_reward:
+        prompts_dataset = PromptDatasetWithGT(prompts_data, tokenizer, strategy, input_template=args.input_template)
+    else:
+        prompts_dataset = PromptDataset(prompts_data, tokenizer, strategy, input_template=args.input_template)
 
     if args.pretrain_data:
         pretrain_data = blending_datasets(
@@ -269,7 +270,7 @@ def train(args):
         remote_rm_url=args.remote_rm_url,
         save_hf_ckpt=args.save_hf_ckpt,
         disable_ds_ckpt=args.disable_ds_ckpt,
-        use_verifiable_reward=args.verifiable_reward,
+        use_verifiable_reward=args.use_verifiable_reward,
     )
 
     trainer.fit(args, prompts_dataloader, pretrain_dataloader, consumed_samples, num_update_steps_per_episodes)
@@ -345,7 +346,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("--adam_betas", type=float, nargs=2, default=(0.9, 0.95), help="Betas for Adam optimizer")
     parser.add_argument("--reward_clip_range", type=float, nargs=2, default=(-10, 10), help="Reward clip range")
-    parser.add_argument('--verifiable_reward', action="store_true", default=False, help='Use verifiable reward for coding/math')
+    parser.add_argument(
+        "--use_verifiable_reward", action="store_true", default=False, help="Use verifiable reward for coding/math"
+    )
+    parser.add_argument(
+        "--answer_key", type=str, default=None, help="Key for ground truth answer in dataset for verifiable reward"
+    )
 
     # DeepSpeed
     parser.add_argument("--seed", type=int, default=42)
@@ -406,6 +412,7 @@ if __name__ == "__main__":
     parser.add_argument("--pretrain_split", type=str, default="train")
     parser.add_argument("--input_key", type=str, default="input", help="JSON dataset key")
     parser.add_argument("--input_template", type=str, default=None)
+    parser.add_argument("--input_template_file", type=str, default=None)
     parser.add_argument(
         "--apply_chat_template", action="store_true", default=False, help="Use HF tokenizer chat template"
     )
@@ -446,5 +453,17 @@ if __name__ == "__main__":
             "[Warning] input_template contains \\n chrracters instead of newline. "
             "You likely want to pass $'\\n' in Bash o \"`n\" in PowerShell."
         )
+
+    if args.input_template_file is not None:
+        assert os.path.exists(args.input_template_file), (
+            f"Provided input_template_file {args.input_template_file} not found"
+        )
+        args.input_template = open(args.input_template_file).read().strip()
+
+    assert not (args.use_verifiable_reward and args.reward_pretrain), (
+        "Cannot use verifiable reward with reward pretrain"
+    )
+
+    assert not (args.use_verifiable_reward and args.answer_key is None), "answer_key is required for verifiable reward"
 
     train(args)

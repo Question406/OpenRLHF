@@ -2,7 +2,7 @@ import time
 from abc import ABC
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Dict
 
 import ray
 import torch
@@ -59,6 +59,7 @@ class Experience:
     action_mask: Optional[torch.BoolTensor]
     info: Optional[dict]
     kl: Optional[torch.Tensor] = None
+    gt_answer: Optional[str] = None
 
     @torch.no_grad()
     def to_device(self, device: torch.device):
@@ -115,6 +116,8 @@ class Samples:
     packed_seq_lens: Optional[torch.Tensor]
     response_length: torch.Tensor
     total_length: torch.Tensor
+    # We convert the answer to tensor to avoid any
+    gt_answer: Optional[List[str]] = None
 
 
 class NaiveExperienceMaker(ABC):
@@ -172,7 +175,9 @@ class NaiveExperienceMaker(ABC):
         return {k: v.to(device) for k, v in batch.items()}
 
     @torch.no_grad()
-    def make_experience_list(self, all_prompts: Union[str, List[str]], **generate_kwargs) -> List[Experience]:
+    def make_experience_list(
+        self, all_prompts: Union[str, List[str], Dict[str, str]], **generate_kwargs
+    ) -> List[Experience]:
         """
         Make a list of experience with the micro_rollout_batch_size.
 
@@ -242,7 +247,9 @@ class NaiveExperienceMaker(ABC):
         return experiences
 
     @torch.no_grad()
-    def generate_samples(self, all_prompts: List[str], **generate_kwargs) -> List[Samples]:
+    def generate_samples(
+        self, all_prompts: Union[List[str], Dict[str, List[str]]], **generate_kwargs
+    ) -> List[Samples]:
         """
         Generate samples and return in batches.
         """
@@ -250,9 +257,23 @@ class NaiveExperienceMaker(ABC):
         args = self.strategy.args
         self.actor.eval()
         # sample multiple response
-        all_prompts = sum([[prompt] * args.n_samples_per_prompt for prompt in all_prompts], [])
+        if isinstance(all_prompts, dict):
+            # * verifiable reward provides both promtps and gt_answers
+            pure_prompts = sum([[prompt] * args.n_samples_per_prompt for prompt in all_prompts["prompt"]], [])
+            all_gt_answers = sum(
+                [[gt_answer] * args.n_samples_per_prompt for gt_answer in all_prompts["gt_answer"]], []
+            )
+            all_prompts = pure_prompts
+        else:
+            all_prompts = sum([[prompt] * args.n_samples_per_prompt for prompt in all_prompts], [])
+            all_gt_answers = None
+
         samples_list = []
-        for i in tqdm(range(0, len(all_prompts), args.micro_rollout_batch_size), desc="Sampling", disable=not self.strategy.is_rank_0()):
+        for i in tqdm(
+            range(0, len(all_prompts), args.micro_rollout_batch_size),
+            desc="Sampling",
+            disable=not self.strategy.is_rank_0(),
+        ):
             prompts = all_prompts[i : i + args.micro_rollout_batch_size]
             inputs = self.tokenize_fn(prompts, self.prompt_max_len, device="cuda")
             sequences, attention_mask, action_mask = self.actor.generate(**inputs, **generate_kwargs)
@@ -264,6 +285,7 @@ class NaiveExperienceMaker(ABC):
                 packed_seq_lens=None,
                 response_length=action_mask.float().sum(dim=-1),
                 total_length=attention_mask.float().sum(dim=-1),
+                gt_answer=None if all_gt_answers is None else all_gt_answers[i : i + args.micro_rollout_batch_size],
             )
             samples_list.append(samples)
             print("Done sampling one")
@@ -301,7 +323,6 @@ class NaiveExperienceMaker(ABC):
 
         # rewards
         if not self.use_verifiable_reward:
-            import ipdb; ipdb.set_trace()
             if self.remote_rm_url is not None:
                 # remote RM
                 queries = self.tokenizer.batch_decode(sequences.cpu(), skip_special_tokens=False)
@@ -310,14 +331,10 @@ class NaiveExperienceMaker(ABC):
                 # local RM
                 r = self.reward_model(sequences, attention_mask)
         else:
-            #* Rule based reward here
-            queries = self.tokenizer.batch_decode(
-                sequences.cpu(), skip_special_tokens=False
-            )
-            r = combined_reward(
-                queries, sequences, attention_mask
-            )
-
+            # * Rule based reward here
+            queries = self.tokenizer.batch_decode(sequences.cpu(), skip_special_tokens=True)
+            r = combined_reward(samples.gt_answer, queries)
+            r = torch.tensor(r, device=action_log_probs.device)
 
         kl = compute_approx_kl(
             action_log_probs,
