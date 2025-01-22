@@ -12,7 +12,7 @@ def math_correctness_reward_fn(
             response = float(response)
             return int(gt_answer == response)
         except ValueError:
-            return 0
+            return 0.0
 
     rewards = [assign_reward(gt_answer, response) for gt_answer, response in zip(gt_answers, responses)]
     return rewards
@@ -41,6 +41,6 @@ def format_reward_fn(responses: List[str]) -> List[float]:
 
 
 def combined_reward(gt_answers, responses) -> List[float]:
-    answer_reward = math_correctness_reward_fn(responses)
-    format_rewards = format_reward_fn(gt_answers, responses)
+    answer_reward = math_correctness_reward_fn(gt_answers, responses)
+    format_rewards = format_reward_fn(responses)
     return [a + b for a, b in zip(answer_reward, format_rewards)]

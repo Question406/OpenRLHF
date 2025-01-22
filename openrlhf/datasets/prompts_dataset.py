@@ -1,5 +1,6 @@
 from torch.utils.data import Dataset
 from tqdm import tqdm
+from typing import List
 
 
 def preprocess_data(data, input_template=None, input_key="input", apply_chat_template=None) -> str:
@@ -55,3 +56,17 @@ class PromptDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.prompts[idx]
+
+
+class PromptDatasetWithGT(PromptDataset):
+    # NOTE: as of 01/21/25, this dataset class cannot support blending with other datasets due to the different __getitem__ signature
+    def __init__(self, dataset, tokenizer, strategy, input_template=None) -> None:
+        super().__init__(dataset, tokenizer, strategy, input_template)
+
+        answer_key = getattr(self.strategy.args, "answer_key", None)
+        assert answer_key is not None, "answer_key is required for PromptDatasetWithGTanswer"
+
+        self.answers: List[str] = list(map(lambda x: x[answer_key], dataset))
+
+    def __getitem__(self, idx):
+        return {"prompt": self.prompts[idx], "gt_answer": self.answers[idx]}
