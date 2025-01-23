@@ -118,6 +118,7 @@ class Samples:
     total_length: torch.Tensor
     # We convert the answer to tensor to avoid any
     gt_answer: Optional[List[str]] = None
+    problem_prefix: Optional[List[str]] = None
 
 
 class NaiveExperienceMaker(ABC):
@@ -285,6 +286,7 @@ class NaiveExperienceMaker(ABC):
                 packed_seq_lens=None,
                 response_length=action_mask.float().sum(dim=-1),
                 total_length=attention_mask.float().sum(dim=-1),
+                problem_prefix=None if all_gt_answers is None else prompts,
                 gt_answer=None if all_gt_answers is None else all_gt_answers[i : i + args.micro_rollout_batch_size],
             )
             samples_list.append(samples)
@@ -332,8 +334,12 @@ class NaiveExperienceMaker(ABC):
                 r = self.reward_model(sequences, attention_mask)
         else:
             # * Rule based reward here
-            queries = self.tokenizer.batch_decode(sequences.cpu(), skip_special_tokens=True)
-            r = combined_reward(samples.gt_answer, queries)
+
+            queries = self.tokenizer.batch_decode(sequences.cpu(), skip_special_tokens=False)
+            responses = [
+                query.split(problem_prefix)[-1] for query, problem_prefix in zip(queries, samples.problem_prefix)
+            ]
+            r = combined_reward(samples.gt_answer, responses)
             r = torch.tensor(r, device=action_log_probs.device)
 
         kl = compute_approx_kl(

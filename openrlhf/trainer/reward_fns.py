@@ -29,6 +29,9 @@ def format_reward_fn(responses: List[str]) -> List[float]:
         for tag in tags:
             if response.count(tag) != 1:
                 return 0.0
+        if not response.strip().startswith("<think>"):
+            return 0.0
+
         # at least the response contains the desired tags
         left_think = response.find("<think>")
         right_think = response.find("</think>")

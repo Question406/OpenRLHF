@@ -21,6 +21,7 @@ def process_math2disk(raw_data_path: str, out_path: str):
                         "type": sample["type"],
                         "solution": sample["solution"],
                         "gt_answer": extract_answer(sample["solution"]),
+                        "uid": file.rstrip(".json"),
                     }
 
     dataset = Dataset.from_generator(build_sample)
