@@ -4,17 +4,52 @@ set -x
 
 input_template_file="templates/r1_default_llama.txt"
 
+# Full
+# read -r -d '' training_commands <<EOF
+# openrlhf.cli.train_ppo \
+#    --pretrain OpenRLHF/Llama-3-8b-sft-mixture \
+#    --save_path ./checkpoint/llama-3-8b-rlhf \
+#    --save_steps -1 \
+#    --logging_steps 1 \
+#    --eval_steps -1 \
+#    --micro_train_batch_size 2 \
+#    --train_batch_size 16 \
+#    --micro_rollout_batch_size 4 \
+#    --rollout_batch_size 128 \
+#    --max_epochs 1 \
+#    --prompt_max_len 256 \
+#    --generate_max_len 2048 \
+#    --zero_stage 2 \
+#    --bf16 \
+#    --actor_learning_rate 5e-7 \
+#    --critic_learning_rate 9e-6 \
+#    --init_kl_coef 0.01 \
+#    --input_template_file ${input_template_file} \
+#    --answer_key gt_answer\
+#    --prompt_data ./raw_data/math_train_balanced-200 \
+#    --input_key problem \
+#    --max_samples 100000 \
+#    --normalize_reward \
+#    --adam_offload \
+#    --advantage_estimator reinforce \
+#    --flash_attn \
+#    --load_checkpoint \
+#    --use_verifiable_reward \
+#    --gradient_checkpointing
+# EOF
+
+# Debug
 read -r -d '' training_commands <<EOF
 openrlhf.cli.train_ppo \
-   --pretrain OpenRLHF/Llama-3-8b-sft-mixture \
+   --pretrain  \
    --save_path ./checkpoint/llama-3-8b-rlhf \
    --save_steps -1 \
    --logging_steps 1 \
    --eval_steps -1 \
-   --micro_train_batch_size 2 \
-   --train_batch_size 16 \
-   --micro_rollout_batch_size 4 \
-   --rollout_batch_size 128 \
+   --micro_train_batch_size 1 \
+   --train_batch_size 4 \
+   --micro_rollout_batch_size 2 \
+   --rollout_batch_size 8 \
    --max_epochs 1 \
    --prompt_max_len 256 \
    --generate_max_len 2048 \
@@ -37,6 +72,7 @@ openrlhf.cli.train_ppo \
    --gradient_checkpointing
 EOF
 
+
 #    e-apply_chat_template \
    # --packing_samples
     # --packing_samples
@@ -44,8 +80,8 @@ EOF
     # --remote_rm_url http://localhost:5000/get_reward
 
 if [[ ${1} != "slurm" ]]; then
-    # deepspeed --include localhost:0 --module $training_commands
-    deepspeed --module $training_commands
+    deepspeed --include localhost:0 --module $training_commands
+    # deepspeed --module $training_commands
 fi
 
 # set -x
