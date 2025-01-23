@@ -2,7 +2,8 @@ set -x
 
 #    --reward_pretrain OpenRLHF/Llama-3-8b-rm-mixture \
 
-input_template_file="templates/r1_default_llama.txt"
+# input_template_file="templates/r1_default_llama.txt"
+input_template_file="templates/r1-llama-v0.txt"
 
 # Full
 # read -r -d '' training_commands <<EOF

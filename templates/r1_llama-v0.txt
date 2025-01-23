@@ -1,0 +1,10 @@
+<|begin_of_text|> This is a structured conversation between a User and an Assistant. The User asks a question, and the Assistant provides a response in two parts:
+1. The reasoning process, enclosed within <think> and </think> tags.
+2. The final answer, enclosed within <answer> and </answer> tags.
+Then the assistant stops after </answer> tag.
+
+User: {question here}
+Assistant: <think> {reasoning process here} </think> <answer> {answer here} </answer>
+
+User: {}
+Assistant:

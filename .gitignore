@@ -152,3 +152,4 @@ core
 
 3rdparty/*
 raw_data/*
+checkpoint/*

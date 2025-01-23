@@ -11,6 +11,7 @@ from datetime import datetime
 from omegaconf import OmegaConf
 from tqdm import tqdm
 import copy
+import json
 import re
 
 from openrlhf.trainer.reward_fns import (
@@ -31,8 +32,8 @@ def build_dataset(data_path):
     return dataset
 
 
-def build_vllm(model_name: str, model_path: str, sampling_args: SamplingParams):
-    llm = LLM(model=model_path)
+def build_vllm(model_name: str):
+    llm = LLM(model=model_name)
     return llm
 
 
@@ -76,14 +77,18 @@ def main(ctx, **kwarg):
     basedir.mkdir(parents=True, exist_ok=True)
     now = datetime.now()
     now = now.strftime("%m-%d-%H-%M-%S")
-    basedir = basedir / f"model@{simplifiy_model_name(configs['model_name'])}" / now
+    basedir = (
+        basedir
+        / f"model@{simplifiy_model_name(configs['model_name'])},prompt@{configs['prompt_file'].split('/')[-1].rstrip('.txt')}"
+        / now
+    )
     basedir.mkdir(parents=True, exist_ok=True)
 
     sampling_params = SamplingParams(
         temperature=configs["temperature"],
         top_p=configs["top_p"],
         n=configs["n"],
-        seed=42,
+        # seed=42,
         max_tokens=1024,
     )
     # save configs
@@ -93,7 +98,8 @@ def main(ctx, **kwarg):
     shutil.copy(configs["prompt_file"], basedir / "prompt_template.txt")
 
     def process_data(sample: Dict[str, Any]):
-        sample["input"] = template_file.format(sample["problem"])
+        # sample["input"] = template_file.format(sample["problem"])
+        sample["input"] = template_file.replace("{}", sample["problem"])
         return sample
 
     # batchify the dataset
@@ -104,26 +110,49 @@ def main(ctx, **kwarg):
             for i in range(0, len(data), batch_size)
         ]
 
+    format_rewards = []
+    math_rewards = []
+    combined_rewards = []
+
     def outputs_generator():
-        llm = build_vllm(
-            configs["model_name"], "gpt2", SamplingParams(temperature=configs["temperature"], top_p=configs["top_p"])
-        )
+        llm = build_vllm(configs["model_name"])
         for batch in tqdm(batchifydata(dataset, 10)):
             inputs = [x["input"] for x in batch]
             outputs = llm.generate(inputs, sampling_params)
             for sample, output in zip(batch, outputs):
                 tmp_sample = copy.deepcopy(sample)
+                sample_format_rewards = []
+                sample_math_rewards = []
+                sample_combined_rewards = []
                 for response in output.outputs:
                     response_str = response.text
                     tmp_sample["response"] = response_str
                     tmp_sample["response-id"] = response.index
-                    tmp_sample["reward-format"] = format_reward_fn(response_str)
-                    tmp_sample["reward-math"] = math_correctness_reward_fn(tmp_sample["gt_answer"], response_str)
-                    tmp_sample["reward-combine"] = combined_reward(tmp_sample["gt_answer"], response_str)
+                    tmp_sample["reward-format"] = format_reward_fn([response_str])
+                    tmp_sample["reward-math"] = math_correctness_reward_fn([tmp_sample["gt_answer"]], [response_str])
+                    tmp_sample["reward-combine"] = combined_reward([tmp_sample["gt_answer"]], [response_str])
+
+                    sample_format_rewards.append(tmp_sample["reward-format"])
+                    sample_math_rewards.append(tmp_sample["reward-math"])
+                    sample_combined_rewards.append(tmp_sample["reward-combine"])
                     yield tmp_sample
+
+                format_rewards.append(sample_format_rewards)
+                math_rewards.append(sample_math_rewards)
+                combined_rewards.append(sample_combined_rewards)
 
     dataset = Dataset.from_generator(outputs_generator)
     dataset.save_to_disk(str(basedir / "outputs"))
+
+    json.dump(
+        {
+            "format-reward": format_rewards,
+            "math-reward": math_rewards,
+            "combined-reward": combined_rewards,
+        },
+        open(str(basedir / "out-rewards.json"), "w"),
+        indent=2,
+    )
 
 
 if __name__ == "__main__":

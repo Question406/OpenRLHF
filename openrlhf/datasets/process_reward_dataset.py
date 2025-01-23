@@ -1,4 +1,3 @@
-import numbers
 from typing import Callable
 
 import torch
@@ -65,9 +64,9 @@ class ProcessRewardDataset(Dataset):
         if isinstance(label_values[0], str):
             label_tokens = []
             for label in label_values:
-                assert (
-                    self.reward_tokens is None or label in self.reward_tokens
-                ), f"label should be in reward tokens {self.reward_tokens}, got {label}"
+                assert self.reward_tokens is None or label in self.reward_tokens, (
+                    f"label should be in reward tokens {self.reward_tokens}, got {label}"
+                )
                 label_tokens.append(convert_token_to_id(label, self.tokenizer))
 
             # label_tokens is list of token id (for '+', '-', etc)
@@ -83,7 +82,7 @@ class ProcessRewardDataset(Dataset):
         # Find the length of the last dimension of the mask
         num_placeholders = mask.sum(dim=-1)
         # Truncate label_tensor along the last dimension to match num_placeholders
-        truncated_labels = label_tensor[..., :num_placeholders.max()]
+        truncated_labels = label_tensor[..., : num_placeholders.max()]
         # Step 3: Update labels at placeholder token positions
         labels = torch.full_like(input_ids, -100)
         labels[mask] = truncated_labels
