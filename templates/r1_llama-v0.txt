@@ -6,5 +6,5 @@ Then the assistant stops after </answer> tag.
 User: {question here}
 Assistant: <think> {reasoning process here} </think> <answer> {answer here} </answer>
 
-User: {}
+User: {problem}
 Assistant:

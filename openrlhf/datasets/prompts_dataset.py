@@ -3,6 +3,11 @@ from tqdm import tqdm
 from typing import List
 
 
+class CustomDefaultDict(dict):
+    def __missing__(self, key):
+        return f"{{{key}}}"  # Keep the placeholder as-is
+
+
 def preprocess_data(data, input_template=None, input_key="input", apply_chat_template=None) -> str:
     if apply_chat_template:
         chat = data[input_key]
@@ -12,7 +17,7 @@ def preprocess_data(data, input_template=None, input_key="input", apply_chat_tem
     else:
         prompt = data[input_key]
         if input_template:
-            prompt = input_template.format(prompt)
+            prompt = input_template.format_map(CustomDefaultDict(problem=prompt))
     return prompt
 
 

@@ -31,6 +31,8 @@ def format_reward_fn(responses: List[str]) -> List[float]:
                 return 0.0
         if not response.strip().startswith("<think>"):
             return 0.0
+        if not response.strip().endswith("</answer>"):
+            return 0.0
 
         # at least the response contains the desired tags
         left_think = response.find("<think>")

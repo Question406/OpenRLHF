@@ -1,10 +1,57 @@
 set -x
 
+echo $PWD
+
+model_name="meta-llama/Meta-Llama-3-8B"
+PROMPT="./templates/r1_llama-v0.txt"
+
+# Debug
+read -r -d '' training_commands <<EOF
+openrlhf.cli.train_ppo \
+   --pretrain $model_name \
+   --save_path ./checkpoint/llama-3-8b-reinforce-r1 \
+   --save_steps -1 \
+   --logging_steps 1 \
+   --eval_steps -1 \
+   --micro_train_batch_size 1 \
+   --train_batch_size 4 \
+   --micro_rollout_batch_size 2 \
+   --rollout_batch_size 8 \
+   --max_epochs 1 \
+   --prompt_max_len 256 \
+   --generate_max_len 2048 \
+   --stop_strings "\n\n" \
+   --zero_stage 2 \
+   --bf16 \
+   --actor_learning_rate 5e-7 \
+   --critic_learning_rate 9e-6 \
+   --init_kl_coef 0.01 \
+   --input_template_file $PROMPT \
+   --answer_key gt_answer\
+   --prompt_data ./raw_data/math_train_balanced-200 \
+   --input_key problem \
+   --max_samples 100000 \
+   --normalize_reward \
+   --adam_offload \
+   --advantage_estimator reinforce \
+   --flash_attn \
+   --load_checkpoint \
+   --use_verifiable_reward \
+   --gradient_checkpointing \
+   --use_wandb 109ad64167d64d59f27db38e751574efa73def3c \
+   --wandb_group trial-runs
+EOF
+
+if [[ ${1} != "slurm" ]]; then
+    deepspeed --include localhost:0 --module $training_commands
+    # deepspeed --module $training_commands
+fi
+
+
+
 #    --reward_pretrain OpenRLHF/Llama-3-8b-rm-mixture \
 
 # input_template_file="templates/r1_default_llama.txt"
-input_template_file="templates/r1-llama-v0.txt"
-
 # Full
 # read -r -d '' training_commands <<EOF
 # openrlhf.cli.train_ppo \
@@ -39,52 +86,46 @@ input_template_file="templates/r1-llama-v0.txt"
 #    --gradient_checkpointing
 # EOF
 
-# Debug
-read -r -d '' training_commands <<EOF
-openrlhf.cli.train_ppo \
-   --pretrain  \
-   --save_path ./checkpoint/llama-3-8b-rlhf \
-   --save_steps -1 \
-   --logging_steps 1 \
-   --eval_steps -1 \
-   --micro_train_batch_size 1 \
-   --train_batch_size 4 \
-   --micro_rollout_batch_size 2 \
-   --rollout_batch_size 8 \
-   --max_epochs 1 \
-   --prompt_max_len 256 \
-   --generate_max_len 2048 \
-   --zero_stage 2 \
-   --bf16 \
-   --actor_learning_rate 5e-7 \
-   --critic_learning_rate 9e-6 \
-   --init_kl_coef 0.01 \
-   --input_template_file ${input_template_file} \
-   --answer_key gt_answer\
-   --prompt_data ./raw_data/math_train_balanced-200 \
-   --input_key problem \
-   --max_samples 100000 \
-   --normalize_reward \
-   --adam_offload \
-   --advantage_estimator reinforce \
-   --flash_attn \
-   --load_checkpoint \
-   --use_verifiable_reward \
-   --gradient_checkpointing
-EOF
 
+# # Debug
+# read -r -d '' training_commands <<EOF
+# openrlhf.cli.train_ppo \
+#    --pretrain  \
+#    --save_path ./checkpoint/llama-3-8b-rlhf \
+#    --save_steps -1 \
+#    --logging_steps 1 \
+#    --eval_steps -1 \
+#    --micro_train_batch_size 1 \
+#    --train_batch_size 4 \
+#    --micro_rollout_batch_size 2 \
+#    --rollout_batch_size 8 \
+#    --max_epochs 1 \
+#    --prompt_max_len 256 \
+#    --generate_max_len 2048 \
+#    --zero_stage 2 \
+#    --bf16 \
+#    --actor_learning_rate 5e-7 \
+#    --critic_learning_rate 9e-6 \
+#    --init_kl_coef 0.01 \
+#    --input_template_file ${input_template_file} \
+#    --answer_key gt_answer\
+#    --prompt_data ./raw_data/math_train_balanced-200 \
+#    --input_key problem \
+#    --max_samples 100000 \
+#    --normalize_reward \
+#    --adam_offload \
+#    --advantage_estimator reinforce \
+#    --flash_attn \
+#    --load_checkpoint \
+#    --use_verifiable_reward \
+#    --gradient_checkpointing
+# EOF
 
 #    e-apply_chat_template \
    # --packing_samples
     # --packing_samples
     # --use_wandb [WANDB_TOKENS] or True (use wandb login command)
     # --remote_rm_url http://localhost:5000/get_reward
-
-if [[ ${1} != "slurm" ]]; then
-    deepspeed --include localhost:0 --module $training_commands
-    # deepspeed --module $training_commands
-fi
-
 # set -x
 #    # --reward_pretrain OpenRLHF/Llama-3-8b-rm-mixture \
 # # OpenRLHF/Llama-3-8b-sft-mixture

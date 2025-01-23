@@ -11,12 +11,19 @@ from openrlhf.datasets import PromptDataset, SFTDataset, PromptDatasetWithGT
 from openrlhf.models import Actor, get_llm_for_sequence_regression
 from openrlhf.trainer import PPOTrainer
 from openrlhf.utils import blending_datasets, get_strategy, get_tokenizer
+from openrlhf.utils.logging_utils import init_logger
+
+LOGGER = init_logger(__name__)
 
 
 def train(args):
     # configure strategy
     strategy = get_strategy(args)
     strategy.setup_distributed()
+
+    model_name = args.pretrain.split("/")[-1]
+    prompt_name = args.input_template_file.split("/")[-1].rstrip(".txt")
+    args.wandb_run_name = f"model@{model_name},prompt@{prompt_name}_{datetime.now().strftime('%m%dT%H:%M')}"
 
     # configure model
     # load huggingface model
@@ -266,6 +273,7 @@ def train(args):
         top_p=args.top_p,
         pad_token_id=tokenizer.pad_token_id,
         eos_token_id=tokenizer.eos_token_id,
+        stop_strings=args.stop_strings,
         # remote reward model
         remote_rm_url=args.remote_rm_url,
         save_hf_ckpt=args.save_hf_ckpt,
@@ -311,6 +319,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_epochs", type=int, default=1)
     parser.add_argument("--prompt_max_len", type=int, default=1024, help="Max tokens for each prompt")
     parser.add_argument("--generate_max_len", type=int, default=1024, help="Max tokens to generate in PPO")
+    parser.add_argument("--stop_strings", type=str, nargs="+", help="Stop string")
     parser.add_argument("--max_len", type=int, default=None, help="deprecated max_len")
     parser.add_argument("--max_samples", type=int, default=1000000)
     parser.add_argument("--max_norm", type=float, default=1.0, help="Gradient clipping")
@@ -421,7 +430,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_wandb", type=str, default=None)
     parser.add_argument("--wandb_org", type=str, default=None)
     parser.add_argument("--wandb_group", type=str, default=None)
-    parser.add_argument("--wandb_project", type=str, default="openrlhf_train_ppo")
+    parser.add_argument("--wandb_project", type=str, default="r1-replicate")
     parser.add_argument(
         "--wandb_run_name",
         type=str,
@@ -455,10 +464,14 @@ if __name__ == "__main__":
         )
 
     if args.input_template_file is not None:
-        assert os.path.exists(args.input_template_file), (
-            f"Provided input_template_file {args.input_template_file} not found"
-        )
+        # assert os.path.exists(args.input_template_file), (
+        #     f"Provided input_template_file {args.input_template_file} not found"
+        # )
+        LOGGER.info("Current folder is %s", os.getcwd())
+        LOGGER.info("ls in ./templates" + str(os.listdir("./templates")))
         args.input_template = open(args.input_template_file).read().strip()
+        LOGGER.info(f"Loaded input template from {args.input_template_file}")
+        LOGGER.info("Prompt is %s", args.input_template)
 
     assert not (args.use_verifiable_reward and args.reward_pretrain), (
         "Cannot use verifiable reward with reward pretrain"

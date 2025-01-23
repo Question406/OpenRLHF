@@ -5,7 +5,7 @@ import torch.distributed as dist
 import torch.nn as nn
 from peft import LoraConfig, TaskType, get_peft_model
 from peft.tuners.lora import LoraLayer
-from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer
 from transformers.integrations.deepspeed import HfDeepSpeedConfig
 
 from .ring_attn_utils import convert_ring_attn_params
@@ -78,6 +78,7 @@ class Actor(nn.Module):
                 torch_dtype=torch.bfloat16 if bf16 else "auto",
                 device_map=device_map,
             )
+            self.tokenizer = AutoTokenizer.from_pretrained(pretrain_or_model)
 
             # LoRA
             if lora_rank > 0:
@@ -119,7 +120,9 @@ class Actor(nn.Module):
             self.model = pretrain_or_model
 
     @torch.no_grad()
-    def generate(self, input_ids: torch.Tensor, **kwargs) -> Union[
+    def generate(
+        self, input_ids: torch.Tensor, **kwargs
+    ) -> Union[
         Tuple[torch.LongTensor, torch.LongTensor],
         Tuple[torch.LongTensor, torch.LongTensor, torch.BoolTensor],
     ]:
@@ -136,6 +139,8 @@ class Actor(nn.Module):
             "eos_token_id": kwargs.get("eos_token_id"),
             "pad_token_id": kwargs.get("pad_token_id"),
             "min_new_tokens": kwargs.get("min_new_tokens", 1),
+            "stop_strings": kwargs.get("stop_strings", None),
+            "tokenizer": None if kwargs.get("stop_strings", None) is None else self.tokenizer,
         }
 
         if kwargs.get("max_new_tokens", None):
