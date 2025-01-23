@@ -22,3 +22,4 @@ wandb
 wheel
 sympy
 regex
+omegaconf
