@@ -8,6 +8,7 @@ import torch.nn as nn
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import numpy as np
 
 from openrlhf.models import Actor, GPTLMLoss, PolicyLoss, ValueLoss
 from openrlhf.models.utils import masked_mean
@@ -416,6 +417,9 @@ class PPOTrainer(ABC):
                 status[k] = (
                     (v * experience.info["response_length"]).sum() / experience.info["response_length"].sum()
                 ).item()
+            elif k in ["format_reward", "math_reward"]:
+                if v is not None:
+                    status[k] = np.mean(v)
             else:
                 status[k] = v.mean().item()
         return status

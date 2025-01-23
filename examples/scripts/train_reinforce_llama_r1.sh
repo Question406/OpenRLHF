@@ -2,22 +2,23 @@ set -x
 
 echo $PWD
 
-model_name="meta-llama/Meta-Llama-3-8B"
+model_name="meta-llama/Meta-Llama-3-8B-Instruct"
 PROMPT="./templates/r1_llama-v0.txt"
+DATA="./raw_data/math_train"
 
 # Debug
 read -r -d '' training_commands <<EOF
 openrlhf.cli.train_ppo \
    --pretrain $model_name \
-   --save_path ./checkpoint/llama-3-8b-reinforce-r1 \
-   --save_steps -1 \
+   --save_path ./checkpoint/llama-3-8b-instruct_reinforce-r1 \
+   --save_steps 10 \
    --logging_steps 1 \
    --eval_steps -1 \
-   --micro_train_batch_size 1 \
-   --train_batch_size 4 \
-   --micro_rollout_batch_size 2 \
-   --rollout_batch_size 8 \
-   --max_epochs 1 \
+   --micro_train_batch_size 4 \
+   --train_batch_size 128 \
+   --micro_rollout_batch_size 4 \
+   --rollout_batch_size 256 \
+   --max_epochs 4 \
    --prompt_max_len 256 \
    --generate_max_len 2048 \
    --stop_strings "\n\n" \
@@ -27,8 +28,8 @@ openrlhf.cli.train_ppo \
    --critic_learning_rate 9e-6 \
    --init_kl_coef 0.01 \
    --input_template_file $PROMPT \
-   --answer_key gt_answer\
-   --prompt_data ./raw_data/math_train_balanced-200 \
+   --answer_key gt_answer \
+   --prompt_data $DATA \
    --input_key problem \
    --max_samples 100000 \
    --normalize_reward \
@@ -42,9 +43,47 @@ openrlhf.cli.train_ppo \
    --wandb_group trial-runs
 EOF
 
+
+# Debug
+# read -r -d '' training_commands <<EOF
+# openrlhf.cli.train_ppo \
+#    --pretrain $model_name \
+#    --save_path ./checkpoint/llama-3-8b-instruct_reinforce-r1 \
+#    --save_steps -1 \
+#    --logging_steps 1 \
+#    --eval_steps -1 \
+#    --micro_train_batch_size 1 \
+#    --train_batch_size 4 \
+#    --micro_rollout_batch_size 2 \
+#    --rollout_batch_size 8 \
+#    --max_epochs 1 \
+#    --prompt_max_len 256 \
+#    --generate_max_len 2048 \
+#    --stop_strings "\n\n" \
+#    --zero_stage 2 \
+#    --bf16 \
+#    --actor_learning_rate 5e-7 \
+#    --critic_learning_rate 9e-6 \
+#    --init_kl_coef 0.01 \
+#    --input_template_file $PROMPT \
+#    --answer_key gt_answer\
+#    --prompt_data ./raw_data/math_train_balanced-200 \
+#    --input_key problem \
+#    --max_samples 100000 \
+#    --normalize_reward \
+#    --adam_offload \
+#    --advantage_estimator reinforce \
+#    --flash_attn \
+#    --load_checkpoint \
+#    --use_verifiable_reward \
+#    --gradient_checkpointing \
+#    --use_wandb 109ad64167d64d59f27db38e751574efa73def3c \
+#    --wandb_group trial-runs
+# EOF
+
 if [[ ${1} != "slurm" ]]; then
-    deepspeed --include localhost:0 --module $training_commands
-    # deepspeed --module $training_commands
+    # deepspeed --include localhost:0 --module $training_commands
+    deepspeed --module $training_commands
 fi
 
 

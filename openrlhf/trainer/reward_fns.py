@@ -1,5 +1,7 @@
 # This file contains functions for verifiable reward.
 from typing import List
+from openrlhf.trainer.eval_utils import math_equal
+from openrlhf.trainer.answer_extraction import extract_answer
 
 
 def math_correctness_reward_fn(
@@ -8,9 +10,7 @@ def math_correctness_reward_fn(
 ) -> List[int]:
     def assign_reward(gt_answer, response):
         try:
-            gt_answer = float(gt_answer)
-            response = float(response)
-            return int(gt_answer == response)
+            return math_equal(extract_answer(response), gt_answer)
         except ValueError:
             return 0.0
 

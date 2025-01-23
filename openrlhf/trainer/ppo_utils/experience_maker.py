@@ -14,7 +14,7 @@ from openrlhf.models.utils import compute_approx_kl, compute_reward, masked_mean
 from openrlhf.utils.logging_utils import init_logger
 from openrlhf.utils.remote_rm_utils import remote_rm_fn, remote_rm_fn_ray
 
-from openrlhf.trainer.reward_fns import combined_reward
+from openrlhf.trainer.reward_fns import combined_reward, math_correctness_reward_fn, format_reward_fn
 
 logger = init_logger(__name__)
 
@@ -290,7 +290,7 @@ class NaiveExperienceMaker(ABC):
                 gt_answer=None if all_gt_answers is None else all_gt_answers[i : i + args.micro_rollout_batch_size],
             )
             samples_list.append(samples)
-            print("Done sampling one")
+            # print("Done sampling one")
         return samples_list
 
     @torch.no_grad()
@@ -332,6 +332,8 @@ class NaiveExperienceMaker(ABC):
             else:
                 # local RM
                 r = self.reward_model(sequences, attention_mask)
+            math_reward = []
+            format_reward = []
         else:
             # * Rule based reward here
 
@@ -340,6 +342,8 @@ class NaiveExperienceMaker(ABC):
                 query.split(problem_prefix)[-1] for query, problem_prefix in zip(queries, samples.problem_prefix)
             ]
             r = combined_reward(samples.gt_answer, responses)
+            math_reward = math_correctness_reward_fn(samples.gt_answer, responses)
+            format_reward = format_reward_fn(responses)
             r = torch.tensor(r, device=action_log_probs.device)
 
         kl = compute_approx_kl(
@@ -355,6 +359,8 @@ class NaiveExperienceMaker(ABC):
             "response_length": samples.response_length,
             "total_length": samples.total_length,
             "num_actions": num_actions,
+            "format_reward": math_reward,
+            "math_reward": format_reward,
         }
         # reset model state
         self.actor.train()
