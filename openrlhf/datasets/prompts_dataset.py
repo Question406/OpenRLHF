@@ -1,6 +1,14 @@
+import os
+import sys
+import copy
+import importlib
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from typing import List
+from typing import List, Dict
+
+# This is a declaration of the MESSAGE_TEMPLATE variable
+# In training, load_constants function may load a python file that contains this variable, and overwrites this None value
+MESSAGE_TEMPLATE = None
 
 
 class CustomDefaultDict(dict):
@@ -8,11 +16,48 @@ class CustomDefaultDict(dict):
         return f"{{{key}}}"  # Keep the placeholder as-is
 
 
+def apply_prompt(prompt_list: List[Dict[str, str]], problem):
+    prompt_list = copy.deepcopy(prompt_list)
+    prompt_list = [
+        # {k: v.format(**answer_dict) if isinstance(v, str) else v for k, v in prompt.items()} for prompt in prompt_list
+        {k: v.format_map(CustomDefaultDict(problem=problem)) if isinstance(v, str) else v for k, v in prompt.items()}
+        for prompt in prompt_list
+    ]
+    return prompt_list
+
+
+def load_constants(file_path, **kwargs):
+    # This function loads some constant variables from a python file, used for changing prompts and hyper-params
+    module_name = os.path.splitext(os.path.basename(file_path))[0]
+
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None:
+        raise ImportError(f"Could not load spec for module from {file_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+
+    # Import constants into global namespace
+    for key, value in vars(module).items():
+        if key.isupper():  # Only uppercase constants
+            globals()[key] = value
+
+    for key, value in kwargs.items():
+        if key.isupper():
+            globals()[key] = value
+    return module
+
+
 def preprocess_data(data, input_template=None, input_key="input", apply_chat_template=None) -> str:
     if apply_chat_template:
-        chat = data[input_key]
-        if isinstance(chat, str):
-            chat = [{"role": "user", "content": chat}]
+        problem = data[input_key]
+        if MESSAGE_TEMPLATE is None:
+            # Use the default templaet
+            if isinstance(problem, str):
+                chat = [{"role": "user", "content": problem}]
+        else:
+            chat = apply_prompt(MESSAGE_TEMPLATE, problem)
         prompt = apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
     else:
         prompt = data[input_key]

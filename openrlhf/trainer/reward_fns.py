@@ -10,7 +10,7 @@ def math_correctness_reward_fn(
 ) -> List[int]:
     def assign_reward(gt_answer, response):
         try:
-            return math_equal(extract_answer(response), gt_answer)
+            return float(math_equal(extract_answer(response), gt_answer))
         except ValueError:
             return 0.0
 

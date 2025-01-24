@@ -3,10 +3,11 @@ set -x
 echo $PWD
 
 # model_name="meta-llama/Meta-Llama-3-8B-Instruct"
-model_name="meta-llama/Meta-Llama-3-8B"
+model_name="meta-llama/Meta-Llama-3-8B-Instruct"
 PROMPT="./templates/r1_llama-v0.txt"
+PROMPT="./templates/r1_llama_instruct_terv0.py"
 DATA="./raw_data/math_train"
-SAVE_PATH="./checkpoint/llama-3-8b_reinforce-r1"
+SAVE_PATH="./checkpoint/llama-3-8b-instruct_reinforce-r1"
 
 # Debug
 read -r -d '' training_commands <<EOF
@@ -14,7 +15,8 @@ openrlhf.cli.train_ppo \
    --pretrain $model_name \
    --save_path $SAVE_PATH \
    --ckpt_path $SAVE_PATH-ckpts \
-   --save_steps 20 \
+   --num_episodes 5 \
+   --save_steps 10 \
    --logging_steps 1 \
    --eval_steps -1 \
    --micro_train_batch_size 4 \
@@ -24,13 +26,13 @@ openrlhf.cli.train_ppo \
    --max_epochs 4 \
    --prompt_max_len 256 \
    --generate_max_len 2048 \
-   --stop_strings "\n\n" \
    --zero_stage 2 \
    --bf16 \
    --actor_learning_rate 5e-7 \
    --critic_learning_rate 9e-6 \
    --init_kl_coef 0.01 \
    --input_template_file $PROMPT \
+   --apply_chat_template \
    --answer_key gt_answer \
    --prompt_data $DATA \
    --input_key problem \
@@ -47,6 +49,13 @@ openrlhf.cli.train_ppo \
    --wandb_group trial-runs
 EOF
 
+if [[ ${1} != "slurm" ]]; then
+    # deepspeed --include localhost:0 --module $training_commands
+    deepspeed --include localhost:4,5,6,7 --module $training_commands
+fi
+
+
+#    --stop_strings "\n\n" \
 
 # Debug
 # read -r -d '' training_commands <<EOF
@@ -84,12 +93,6 @@ EOF
 #    --use_wandb 109ad64167d64d59f27db38e751574efa73def3c \
 #    --wandb_group trial-runs
 # EOF
-
-if [[ ${1} != "slurm" ]]; then
-    # deepspeed --include localhost:0 --module $training_commands
-    deepspeed --module $training_commands
-fi
-
 
 
 #    --reward_pretrain OpenRLHF/Llama-3-8b-rm-mixture \

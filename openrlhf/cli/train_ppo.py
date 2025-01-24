@@ -12,6 +12,7 @@ from openrlhf.models import Actor, get_llm_for_sequence_regression
 from openrlhf.trainer import PPOTrainer
 from openrlhf.utils import blending_datasets, get_strategy, get_tokenizer
 from openrlhf.utils.logging_utils import init_logger
+from openrlhf.datasets.prompts_dataset import load_constants
 
 LOGGER = init_logger(__name__)
 
@@ -464,14 +465,21 @@ if __name__ == "__main__":
         )
 
     if args.input_template_file is not None:
-        # assert os.path.exists(args.input_template_file), (
-        #     f"Provided input_template_file {args.input_template_file} not found"
-        # )
-        LOGGER.info("Current folder is %s", os.getcwd())
-        LOGGER.info("ls in ./templates" + str(os.listdir("./templates")))
-        args.input_template = open(args.input_template_file).read().strip()
-        LOGGER.info(f"Loaded input template from {args.input_template_file}")
-        LOGGER.info("Prompt is %s", args.input_template)
+        assert os.path.exists(args.input_template_file), (
+            f"Provided input_template_file {args.input_template_file} not found"
+        )
+        # LOGGER.info("Current folder is %s", os.getcwd())
+        # LOGGER.info("ls in ./templates" + str(os.listdir("./templates")))
+        # if ""
+        if args.input_template_file.endswith(".txt"):
+            args.input_template = open(args.input_template_file).read().strip()
+            LOGGER.info(f"Loaded input template from {args.input_template_file}")
+            LOGGER.info("Prompt is %s", args.input_template)
+        elif args.input_template_file.endswith(".py"):
+            load_constants(args.input_template_file)
+            LOGGER.info(f"Loaded input template from {args.input_template_file}")
+        else:
+            raise ValueError("Unsupported input_template file")
 
     assert not (args.use_verifiable_reward and args.reward_pretrain), (
         "Cannot use verifiable reward with reward pretrain"

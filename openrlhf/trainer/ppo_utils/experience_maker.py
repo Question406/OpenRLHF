@@ -277,6 +277,7 @@ class NaiveExperienceMaker(ABC):
         ):
             prompts = all_prompts[i : i + args.micro_rollout_batch_size]
             inputs = self.tokenize_fn(prompts, self.prompt_max_len, device="cuda")
+            problem_prefix = self.tokenizer.batch_decode(inputs["input_ids"], skip_special_tokens=True)
             sequences, attention_mask, action_mask = self.actor.generate(**inputs, **generate_kwargs)
             samples = Samples(
                 sequences=sequences,
@@ -286,7 +287,7 @@ class NaiveExperienceMaker(ABC):
                 packed_seq_lens=None,
                 response_length=action_mask.float().sum(dim=-1),
                 total_length=attention_mask.float().sum(dim=-1),
-                problem_prefix=None if all_gt_answers is None else prompts,
+                problem_prefix=None if all_gt_answers is None else problem_prefix,
                 gt_answer=None if all_gt_answers is None else all_gt_answers[i : i + args.micro_rollout_batch_size],
             )
             samples_list.append(samples)
@@ -337,7 +338,7 @@ class NaiveExperienceMaker(ABC):
         else:
             # * Rule based reward here
 
-            queries = self.tokenizer.batch_decode(sequences.cpu(), skip_special_tokens=False)
+            queries = self.tokenizer.batch_decode(sequences.cpu(), skip_special_tokens=True)
             responses = [
                 query.split(problem_prefix)[-1] for query, problem_prefix in zip(queries, samples.problem_prefix)
             ]
@@ -359,8 +360,8 @@ class NaiveExperienceMaker(ABC):
             "response_length": samples.response_length,
             "total_length": samples.total_length,
             "num_actions": num_actions,
-            "format_reward": math_reward,
-            "math_reward": format_reward,
+            "format_reward": torch.tensor(math_reward, device=action_log_probs.device),
+            "math_reward": torch.tensor(format_reward, device=action_log_probs.device),
         }
         # reset model state
         self.actor.train()
