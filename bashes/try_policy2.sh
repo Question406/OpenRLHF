@@ -24,14 +24,14 @@ TOPPs=(
 
 RUNNAME="initialpolicy2"
 # MODEL="meta-llama/Meta-Llama-3.2-3B"
-
 # DATA="./raw_data/math_train_balanced-200"
 DATA="./raw_data/gsm8k_train"
 
 # PROMPT="templates/r1_default_llama.txt"
-PROMPT="templates/r1_llama-v0.txt"
+# PROMPT="templates/r1_llama-v0.txt"
+PROMPT="templates/r1_llama_instruct_v0.py"
 
-CUDA_VISIBLE_DEVICES=0 python tests/sample_many.py \
+CUDA_VISIBLE_DEVICES=2 python tests/sample_many.py \
     --run_name $RUNNAME-8B \
     --model_name ${MODELS[0]} \
     --data_path $DATA \
@@ -41,7 +41,7 @@ CUDA_VISIBLE_DEVICES=0 python tests/sample_many.py \
     --n 8 \
     --max_tokens 2048 &
 
-CUDA_VISIBLE_DEVICES=1 python tests/sample_many.py \
+CUDA_VISIBLE_DEVICES=3 python tests/sample_many.py \
     --run_name $RUNNAME-8B-Instruct \
     --model_name ${MODELS[1]} \
     --data_path $DATA \
