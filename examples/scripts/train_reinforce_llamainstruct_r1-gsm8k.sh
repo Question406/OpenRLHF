@@ -6,8 +6,8 @@ echo $PWD
 model_name="meta-llama/Meta-Llama-3-8B-Instruct"
 PROMPT="./templates/r1_llama-v0.txt"
 PROMPT="./templates/r1_llama_instruct_v0.py"
-DATA="./raw_data/math_train"
-SAVE_PATH="./checkpoint/llama-3-8b-instruct_math_reinforce-r1"
+DATA="./raw_data/gsm8k_train"
+SAVE_PATH="./checkpoint/llama-3-8b-instruct_gsm8k_reinforce-r1"
 
 # Debug
 read -r -d '' training_commands <<EOF
@@ -52,7 +52,7 @@ EOF
 
 if [[ ${1} != "slurm" ]]; then
     # deepspeed --include localhost:0 --module $training_commands
-    deepspeed --include localhost:4,5,6,7 --module $training_commands
+    deepspeed --master_port 52038 --include localhost:2,3 --module $training_commands
 fi
 
 

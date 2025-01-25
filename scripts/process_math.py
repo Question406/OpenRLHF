@@ -1,7 +1,7 @@
 # This file contains the scripts to process raw math dataset and save it to disk.
 
 import os
-from datasets import Dataset
+from datasets import Dataset, load_dataset
 import json
 
 from openrlhf.trainer.answer_extraction import extract_answer
@@ -70,8 +70,33 @@ def extract_balance_subset(dataset: Dataset, out_path: str, num_samples: int):
     return balanced_dataset
 
 
-MATH_PATH = "/Users/jiyi/Documents/2025-Projects/OpenRLHF/3rdparty/math/raw_MATH/train"
-OUT_PATH = "raw_data/math_train"
+def convert_test(out_path: str):
+    def build_sample():
+        dataset = load_dataset("json", data_dir="./3rdparty/prm800k/prm800k/math_splits/")["test"]
+        # import ipdb
 
-dataset = process_math2disk(MATH_PATH, OUT_PATH)
-extract_balance_subset(dataset, "raw_data/math_train_balanced-200", 200)
+        for idx, sample in enumerate(dataset):
+            yield {
+                "problem": sample["problem"],
+                "level": sample["level"],
+                # "type": sample["type"],
+                "solution": sample["solution"],
+                # "gt_answer": extract_answer(sample["solution"]),
+                "gt_answer": sample["answer"],
+                "uid": idx,
+            }
+
+    # build_sample()
+
+    dataset = Dataset.from_generator(build_sample)
+    dataset.save_to_disk(out_path)
+    return dataset
+
+
+# MATH_PATH = "/Users/jiyi/Documents/2025-Projects/OpenRLHF/3rdparty/math/raw_MATH/train"
+# OUT_PATH = "raw_data/math_train"
+
+# dataset = process_math2disk(MATH_PATH, OUT_PATH)
+# extract_balance_subset(dataset, "raw_data/math_train_balanced-200", 200)
+
+convert_test("./raw_data/math_test")

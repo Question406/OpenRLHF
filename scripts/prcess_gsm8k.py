@@ -1,7 +1,7 @@
 # This file contains tool functions for processing gsm8k dataset.
 
 import numpy as np
-from datasets import load_dataset, load_from_disk
+from datasets import load_dataset, load_from_disk, Dataset
 from collections import defaultdict
 from openrlhf.trainer.answer_extraction import extract_answer
 from openrlhf.trainer.eval_utils import math_equal
@@ -27,7 +27,7 @@ def filter_hard_question(load_path, save_path, threshold):
     dataset = load_from_disk(load_path)
     origin_dataset = load_dataset("openai/gsm8k", "main")["train"]
     # count accuracy for each uid
-    accuracy_mapping = defaultdict([])
+    accuracy_mapping = defaultdict(list)
     for sample in dataset:
         if math_equal(sample["response"], sample["gt_answer"]):
             accuracy_mapping[sample["uid"]].append(1)
@@ -40,6 +40,23 @@ def filter_hard_question(load_path, save_path, threshold):
     filterd_dataset = origin_dataset.filter(lambda x: x["uid"] in filterd_question_ids)
     filterd_dataset.save_to_disk(save_path)
     return filterd_dataset
+
+
+def get_accuracy_mapping(dataset: Dataset):
+    accuracy_mapping = defaultdict(list)
+    for sample in dataset:
+        if math_equal(sample["response"], sample["gt_answer"]):
+            accuracy_mapping[sample["uid"]].append(1)
+        else:
+            accuracy_mapping[sample["uid"]].append(0)
+    return accuracy_mapping
+
+
+def pass_at_k(accmapping, k):
+    res = {}
+    for key, value in accmapping.items():
+        res[key] = np.mean(np.mean([value[i * k : (i + 1) * k] for i in range(0, len(value), k)]))
+    return np.mean(list(res.values()))
 
 
 if __name__ == "__main__":
