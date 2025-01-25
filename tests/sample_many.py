@@ -66,12 +66,13 @@ def samplingParam2json(sampling_param):
 @click.option("--top_p", default=1.0, prompt="The ratio for TopP sampling")
 @click.option("--n", default=8, prompt="The number of responses to sample per prompt")
 @click.option("--max_tokens", default=2048, prompt="The number of responses to sample per prompt")
-@click.option("--stop", default=None, prompt="List of stop words", multiple=True)
+# @click.option("--stop", default=None, prompt="List of stop words", multiple=True)
 # @click.pass_context
 def main(**kwargs):
     # ctx = kwargs
     # configs = ctx.params
     configs = kwargs
+    configs["stop"] = None
     if configs["stop"] is not None:
         configs["stop"] = list(configs["stop"])
 
