@@ -89,6 +89,7 @@ class PPOTrainer(ABC):
         save_hf_ckpt: bool = False,
         disable_ds_ckpt: bool = False,
         use_verifiable_reward: bool = False,
+        verifiable_rewawd_fn: str = "math",
         **generate_kwargs,
     ) -> None:
         assert not isinstance(reward_model, List) or len(reward_model) == 1 or reward_fn is not None, (
@@ -151,6 +152,7 @@ class PPOTrainer(ABC):
             remote_rm_url,
             reward_fn,
             use_verifiable_reward=use_verifiable_reward,
+            verifiable_rewawd_fn=verifiable_rewawd_fn,
         )
         packing_samples = getattr(self.args, "packing_samples", False)
         self.replay_buffer = NaiveReplayBuffer(

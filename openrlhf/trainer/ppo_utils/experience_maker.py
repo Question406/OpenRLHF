@@ -14,7 +14,7 @@ from openrlhf.models.utils import compute_approx_kl, compute_reward, masked_mean
 from openrlhf.utils.logging_utils import init_logger
 from openrlhf.utils.remote_rm_utils import remote_rm_fn, remote_rm_fn_ray
 
-from openrlhf.trainer.reward_fns import combined_reward, math_correctness_reward_fn, format_reward_fn
+from openrlhf.trainer.reward_fns import math_correctness_reward_fn, format_reward_fn, REWARD_REGISTORY
 
 logger = init_logger(__name__)
 
@@ -139,6 +139,7 @@ class NaiveExperienceMaker(ABC):
         remote_rm_url: str = None,
         reward_fn=None,
         use_verifiable_reward=False,
+        verifiable_reward_fn="math",
     ) -> None:
         super().__init__()
         self.actor = actor
@@ -154,6 +155,7 @@ class NaiveExperienceMaker(ABC):
         self.perf_stats = None
         self.advantage_estimator = strategy.args.advantage_estimator
         self.use_verifiable_reward = use_verifiable_reward
+        self.verifiable_reward_fn = REWARD_REGISTORY.get(verifiable_reward_fn)
 
     # tokenizer
     def tokenize_fn(self, texts, max_length, padding=True, device=None):
@@ -342,7 +344,9 @@ class NaiveExperienceMaker(ABC):
             responses = [
                 query.split(problem_prefix)[-1] for query, problem_prefix in zip(queries, samples.problem_prefix)
             ]
-            r = combined_reward(samples.gt_answer, responses)
+            # r = combined_reward(samples.gt_answer, responses)
+            r = self.verifiable_reward_fn(samples.gt_answer, responses)
+            # TODO: think how to support reporting multiple rewards
             math_reward = math_correctness_reward_fn(samples.gt_answer, responses)
             format_reward = format_reward_fn(responses)
             r = torch.tensor(r, device=action_log_probs.device)

@@ -5,7 +5,7 @@ from openrlhf.trainer.eval_utils import math_equal
 from openrlhf.trainer.answer_extraction import extract_answer
 from openrlhf.utils.registry_utils import Registry
 
-REWARD_REGISTOR = Registry()
+REWARD_REGISTORY = Registry()
 
 
 def math_correctness_reward_fn(
@@ -135,8 +135,8 @@ def countdown_reward_fn(
     return rewards
 
 
-REWARD_REGISTOR.register("countdown", countdown_reward_fn)
-REWARD_REGISTOR.register("math_correctness", math_correctness_reward_fn)
-REWARD_REGISTOR.register("format", format_reward_fn)
-REWARD_REGISTOR.register("math", combined_reward)
-REWARD_REGISTOR.register("gsm8k", combined_reward)
+REWARD_REGISTORY.register("countdown", countdown_reward_fn)
+REWARD_REGISTORY.register("math_correctness", math_correctness_reward_fn)
+REWARD_REGISTORY.register("format", format_reward_fn)
+REWARD_REGISTORY.register("math", combined_reward)
+REWARD_REGISTORY.register("gsm8k", combined_reward)
