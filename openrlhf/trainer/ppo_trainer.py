@@ -172,7 +172,8 @@ class PPOTrainer(ABC):
                 group=strategy.args.wandb_group,
                 name=strategy.args.wandb_run_name,
                 config=strategy.args.__dict__,
-                reinit=True,
+                # reinit=True,
+                resume="allow",
             )
 
             wandb.define_metric("train/global_step")
