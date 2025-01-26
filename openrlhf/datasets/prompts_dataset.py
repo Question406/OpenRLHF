@@ -16,11 +16,11 @@ class CustomDefaultDict(dict):
         return f"{{{key}}}"  # Keep the placeholder as-is
 
 
-def apply_prompt(prompt_list: List[Dict[str, str]], problem):
+def apply_prompt(prompt_list: List[Dict[str, str]], replace_dict: Dict[str, str]) -> List[Dict[str, str]]:
     prompt_list = copy.deepcopy(prompt_list)
     prompt_list = [
         # {k: v.format(**answer_dict) if isinstance(v, str) else v for k, v in prompt.items()} for prompt in prompt_list
-        {k: v.format_map(CustomDefaultDict(problem=problem)) if isinstance(v, str) else v for k, v in prompt.items()}
+        {k: v.format_map(CustomDefaultDict(**replace_dict)) if isinstance(v, str) else v for k, v in prompt.items()}
         for prompt in prompt_list
     ]
     return prompt_list
@@ -49,20 +49,22 @@ def load_constants(file_path, **kwargs):
     return module
 
 
-def preprocess_data(data, input_template=None, input_key="input", apply_chat_template=None) -> str:
+def preprocess_data(data, input_template=None, input_key: List[str] = ["problem"], apply_chat_template=None) -> str:
+    needed_inputs = {k: data[k] for k in input_key}
     if apply_chat_template:
-        problem = data[input_key]
+        # problem = data[input_key]
         if MESSAGE_TEMPLATE is None:
             # Use the default templaet
-            if isinstance(problem, str):
-                chat = [{"role": "user", "content": problem}]
+            # if isinstance(problem, str):
+            # chat = [{"role": "user", "content": problem}]
+            chat = {"role": "user", "content": data[input_key[0]]}
         else:
-            chat = apply_prompt(MESSAGE_TEMPLATE, problem)
+            chat = apply_prompt(MESSAGE_TEMPLATE, replace_dict=needed_inputs)
         prompt = apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
     else:
-        prompt = data[input_key]
+        # prompt = data[input_key]
         if input_template:
-            prompt = input_template.format_map(CustomDefaultDict(problem=prompt))
+            prompt = input_template.format_map(CustomDefaultDict(**needed_inputs))
     return prompt
 
 
@@ -98,6 +100,9 @@ class PromptDataset(Dataset):
         self.prompts = []
         for data in tqdm(dataset, desc="Preprocessing data", disable=not self.strategy.is_rank_0()):
             prompt = preprocess_data(data, input_template, input_key, apply_chat_template)
+            prompt = prompt.lstrip(
+                tokenizer.bos_token
+            )  # removing leading bos token, will be added in tokenize_fn when making experience
             self.prompts.append(prompt)
 
     def __len__(self):

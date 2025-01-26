@@ -59,6 +59,7 @@ def train(args):
             value_head_prefix=args.value_head_prefix,
             init_value_head=strategy.args.pretrain == strategy.args.critic_pretrain,
         )
+        LOGGER.info("Loaded critic model from %s", args.critic_pretrain)
     else:
         critic = None
 
@@ -427,7 +428,8 @@ if __name__ == "__main__":
         help="sampling probs for datasets",
     )
     parser.add_argument("--pretrain_split", type=str, default="train")
-    parser.add_argument("--input_key", type=str, default="input", help="JSON dataset key")
+    # parser.add_argument("--input_key", type=str, default="input", help="JSON dataset key")
+    parser.add_argument("--input_key", nargs="*", default=["problem"], help="JSON dataset key")
     parser.add_argument("--input_template", type=str, default=None)
     parser.add_argument("--input_template_file", type=str, default=None)
     parser.add_argument(

@@ -46,6 +46,20 @@ def format_reward_fn(responses: List[str]) -> List[float]:
     return rewards
 
 
+def math_simple_reward_fn(gt_answers: List[str], responses: List[str]) -> List[float]:
+    def assign_reward(gt_answer, response):
+        if math_equal(extract_answer(response), gt_answer):
+            return 1.0
+        else:
+            val = -0.5
+        if "boxed" not in response:
+            val = -1.0
+        return val
+
+    rewards = [assign_reward(gt_answer, response) for gt_answer, response in zip(gt_answers, responses)]
+    return rewards
+
+
 def combined_reward(gt_answers: List[str], responses: List[str]) -> List[float]:
     answer_reward = math_correctness_reward_fn(gt_answers, responses)
     format_rewards = format_reward_fn(responses)
@@ -60,13 +74,13 @@ def countdown_reward_fn(
     def extract_solution(solution_str):
         """Extract the equation from the solution string."""
         # Remove everything before the first "Assistant:"
-        if "Assistant:" in solution_str:
-            solution_str = solution_str.split("Assistant:", 1)[1]
-        elif "<|im_start|>assistant" in solution_str:
-            solution_str = solution_str.split("<|im_start|>assistant", 1)[1]
-        else:
-            return None
-        solution_str = solution_str.split("\n")[-1]
+        # if "Assistant:" in solution_str:
+        #     solution_str = solution_str.split("Assistant:", 1)[1]
+        # elif "<|im_start|>assistant" in solution_str:
+        #     solution_str = solution_str.split("<|im_start|>assistant", 1)[1]
+        # else:
+        #     return None
+        # solution_str = solution_str.split("\n")[-1]
 
         answer_pattern = r"<answer>(.*?)</answer>"
         match = re.finditer(answer_pattern, solution_str)
@@ -114,6 +128,8 @@ def countdown_reward_fn(
         score = 1.0
 
         equation = extract_solution(solution_str=response)
+        if equation is None:
+            return 0.0
         # Validate equation uses correct numbers
         if not validate_equation(equation, numbers):
             return format_score
@@ -140,3 +156,4 @@ REWARD_REGISTORY.register("math_correctness", math_correctness_reward_fn)
 REWARD_REGISTORY.register("format", format_reward_fn)
 REWARD_REGISTORY.register("math", combined_reward)
 REWARD_REGISTORY.register("gsm8k", combined_reward)
+REWARD_REGISTORY.register("math_simple", math_simple_reward_fn)

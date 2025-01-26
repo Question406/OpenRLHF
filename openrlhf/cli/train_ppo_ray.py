@@ -25,22 +25,22 @@ def reward_fn(rewards: List[torch.Tensor]):
 def _validate_args(args):
     actor_world_size = args.actor_num_nodes * args.actor_num_gpus_per_node
 
-    assert (
-        args.rollout_batch_size % actor_world_size == 0
-    ), f"rollout_bach_size must be divisible by actor_world_size, got {args.rollout_batch_size} and {actor_world_size}"
+    assert args.rollout_batch_size % actor_world_size == 0, (
+        f"rollout_bach_size must be divisible by actor_world_size, got {args.rollout_batch_size} and {actor_world_size}"
+    )
 
-    assert args.zero_stage != 3 or args.vllm_num_engines > 0, f"ZeRO-3 is only supported when vLLM enabled"
+    assert args.zero_stage != 3 or args.vllm_num_engines > 0, "ZeRO-3 is only supported when vLLM enabled"
 
     if args.vllm_num_engines > 0:
-        assert (
-            actor_world_size % args.vllm_num_engines == 0
-        ), f"actor_world_size must be divisible by vllm_num_engines, got {actor_world_size} and {args.vllm_num_engines}"
+        assert actor_world_size % args.vllm_num_engines == 0, (
+            f"actor_world_size must be divisible by vllm_num_engines, got {actor_world_size} and {args.vllm_num_engines}"
+        )
 
     if args.critic_pretrain:
         critic_world_size = args.critic_num_nodes * args.critic_num_gpus_per_node
-        assert (
-            actor_world_size % critic_world_size == 0
-        ), f"actor_world_size must be divisible by critic_world_size, got {actor_world_size} and {critic_world_size}"
+        assert actor_world_size % critic_world_size == 0, (
+            f"actor_world_size must be divisible by critic_world_size, got {actor_world_size} and {critic_world_size}"
+        )
 
 
 def train(args):
@@ -54,7 +54,7 @@ def train(args):
     if args.colocate_actor_ref:
         assert (
             args.actor_num_nodes == args.ref_num_nodes and args.actor_num_gpus_per_node == args.ref_num_gpus_per_node
-        ), f"num_nodes and num_gpus_per_node must be the same when colocate actor and ref model."
+        ), "num_nodes and num_gpus_per_node must be the same when colocate actor and ref model."
 
         bundles = [
             {"GPU": args.actor_num_gpus_per_node, "CPU": args.actor_num_gpus_per_node}
@@ -94,7 +94,7 @@ def train(args):
         assert (
             args.critic_num_nodes == args.reward_num_nodes
             and args.critic_num_gpus_per_node == args.reward_num_gpus_per_node
-        ), f"num_nodes and num_gpus_per_node must be the same when colocate critic and reward model."
+        ), "num_nodes and num_gpus_per_node must be the same when colocate critic and reward model."
 
         bundles = [
             {"GPU": args.critic_num_gpus_per_node, "CPU": args.critic_num_gpus_per_node}

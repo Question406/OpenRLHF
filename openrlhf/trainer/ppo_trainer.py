@@ -8,10 +8,13 @@ import torch.nn as nn
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import numpy as np
+from collections import defaultdict
 
 from openrlhf.models import Actor, GPTLMLoss, PolicyLoss, ValueLoss
 from openrlhf.models.utils import masked_mean
 from openrlhf.utils.distributed_sampler import DistributedSampler
+from openrlhf.trainer.ppo_utils.replay_buffer import BufferItem
 
 from .ppo_utils import AdaptiveKLController, Experience, FixedKLController, NaiveExperienceMaker, NaiveReplayBuffer
 
@@ -89,7 +92,7 @@ class PPOTrainer(ABC):
         save_hf_ckpt: bool = False,
         disable_ds_ckpt: bool = False,
         use_verifiable_reward: bool = False,
-        verifiable_rewawd_fn: str = "math",
+        verifiable_reward_fn: str = "math",
         **generate_kwargs,
     ) -> None:
         assert not isinstance(reward_model, List) or len(reward_model) == 1 or reward_fn is not None, (
@@ -152,7 +155,7 @@ class PPOTrainer(ABC):
             remote_rm_url,
             reward_fn,
             use_verifiable_reward=use_verifiable_reward,
-            verifiable_rewawd_fn=verifiable_rewawd_fn,
+            verifiable_reward_fn=verifiable_reward_fn,
         )
         packing_samples = getattr(self.args, "packing_samples", False)
         self.replay_buffer = NaiveReplayBuffer(
@@ -242,6 +245,22 @@ class PPOTrainer(ABC):
                         )
                         self.strategy.print(output)
                     self.replay_buffer.append(experience)
+
+                # collect raw reward befor normalization
+                reward_infos = defaultdict(list)
+                for bufferitem in self.replay_buffer.items:
+                    bufferitem: BufferItem
+                    for k, v in bufferitem.info.items():
+                        if "_reward" in k:
+                            reward_infos[f"{k}"].append(v)
+                report_reward_infos = {"global_step": steps + 1}
+                for k, v in reward_infos.items():
+                    report_reward_infos[f"raw_reward/{k}_mean"] = np.mean(v)
+                    report_reward_infos[f"raw_reward/{k}_std"] = np.std(v)
+                    report_reward_infos[f"raw_reward/{k}_min"] = np.min(v)
+                    report_reward_infos[f"raw_reward/{k}_max"] = np.max(v)
+                if self._wandb is not None and self.strategy.is_rank_0():
+                    self._wandb.log(report_reward_infos)
 
                 torch.cuda.empty_cache()
                 self.replay_buffer.normalize("advantages", self.strategy)
@@ -419,11 +438,13 @@ class PPOTrainer(ABC):
                 status[k] = (
                     (v * experience.info["response_length"]).sum() / experience.info["response_length"].sum()
                 ).item()
-            # elif k in ["format_reward", "math_reward"]:
-            # if v is not None:
-            # status[k] = np.mean(v)
             else:
                 status[k] = v.mean().item()
+        for k, v in experience.info.items():
+            if "reward" in k:
+                status[f"{k}_std"] = v.std().item()
+                status[f"{k}_min"] = v.min().item()
+                status[f"{k}_max"] = v.max().item()
         return status
 
     def training_step_critic(self, experience: Experience) -> Dict[str, float]:

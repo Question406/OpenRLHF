@@ -16,7 +16,7 @@ from openrlhf.utils.remote_rm_utils import remote_rm_fn, remote_rm_fn_ray
 
 from openrlhf.trainer.reward_fns import math_correctness_reward_fn, format_reward_fn, REWARD_REGISTORY
 
-logger = init_logger(__name__)
+LOGGER = init_logger(__name__)
 
 
 def to(tensor: Union[torch.Tensor, list[torch.Tensor]], device):
@@ -156,6 +156,7 @@ class NaiveExperienceMaker(ABC):
         self.advantage_estimator = strategy.args.advantage_estimator
         self.use_verifiable_reward = use_verifiable_reward
         self.verifiable_reward_fn = REWARD_REGISTORY.get(verifiable_reward_fn)
+        LOGGER.info("Using verifiable reward function:", self.verifiable_reward_fn)
 
     # tokenizer
     def tokenize_fn(self, texts, max_length, padding=True, device=None):
@@ -163,14 +164,16 @@ class NaiveExperienceMaker(ABC):
             # when padding is False, return tokenized texts as list
             return self.tokenizer(
                 texts,
-                add_special_tokens=False,
+                # add_special_tokens=False,
+                add_special_tokens=True,
                 max_length=max_length,
                 truncation=True,
             )
         batch = self.tokenizer(
             texts,
             return_tensors="pt",
-            add_special_tokens=False,
+            # add_special_tokens=False,
+            add_special_tokens=True,
             max_length=max_length,
             padding=True,
             truncation=True,
@@ -281,6 +284,7 @@ class NaiveExperienceMaker(ABC):
             inputs = self.tokenize_fn(prompts, self.prompt_max_len, device="cuda")
             problem_prefix = self.tokenizer.batch_decode(inputs["input_ids"], skip_special_tokens=True)
             sequences, attention_mask, action_mask = self.actor.generate(**inputs, **generate_kwargs)
+
             samples = Samples(
                 sequences=sequences,
                 attention_mask=attention_mask,
@@ -339,17 +343,16 @@ class NaiveExperienceMaker(ABC):
             format_reward = []
         else:
             # * Rule based reward here
-
             queries = self.tokenizer.batch_decode(sequences.cpu(), skip_special_tokens=True)
             responses = [
                 query.split(problem_prefix)[-1] for query, problem_prefix in zip(queries, samples.problem_prefix)
             ]
             # r = combined_reward(samples.gt_answer, responses)
-            r = self.verifiable_reward_fn(samples.gt_answer, responses)
+            list_r = self.verifiable_reward_fn(samples.gt_answer, responses)
             # TODO: think how to support reporting multiple rewards
             math_reward = math_correctness_reward_fn(samples.gt_answer, responses)
             format_reward = format_reward_fn(responses)
-            r = torch.tensor(r, device=action_log_probs.device)
+            r = torch.tensor(list_r, device=action_log_probs.device)
 
         kl = compute_approx_kl(
             action_log_probs,
@@ -364,6 +367,7 @@ class NaiveExperienceMaker(ABC):
             "response_length": samples.response_length,
             "total_length": samples.total_length,
             "num_actions": num_actions,
+            "combine_reward": r,
             "format_reward": torch.tensor(math_reward, device=action_log_probs.device),
             "math_reward": torch.tensor(format_reward, device=action_log_probs.device),
         }
