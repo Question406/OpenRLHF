@@ -93,10 +93,13 @@ def convert_test(out_path: str):
     return dataset
 
 
+# def filter_level1and2(dataset, out_path):
+# def
+
 # MATH_PATH = "/Users/jiyi/Documents/2025-Projects/OpenRLHF/3rdparty/math/raw_MATH/train"
 # OUT_PATH = "raw_data/math_train"
 
 # dataset = process_math2disk(MATH_PATH, OUT_PATH)
 # extract_balance_subset(dataset, "raw_data/math_train_balanced-200", 200)
-
-convert_test("./raw_data/math_test")
+#
+# convert_test("./raw_data/math_test")

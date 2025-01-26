@@ -11,6 +11,7 @@ def convert_countdown(out_path):
             yield {
                 "problem": str(sample["nums"]),
                 "solution": sample["target"],
+                "target": sample["target"],
                 "gt_answer": "{nums} = {target}".format(**sample),
             }
 
