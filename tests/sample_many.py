@@ -15,11 +15,7 @@ import re
 from typing import Dict, Any
 from transformers import AutoTokenizer
 
-from openrlhf.trainer.reward_fns import (
-    math_correctness_reward_fn,
-    format_reward_fn,
-    combined_reward,
-)
+from openrlhf.trainer.reward_fns import math_correctness_reward_fn, format_reward_fn, REWARD_REGISTORY
 from openrlhf.utils.logging_utils import init_logger
 from openrlhf.datasets.prompts_dataset import preprocess_data, load_constants
 
@@ -66,6 +62,9 @@ def samplingParam2json(sampling_param):
 @click.option("--top_p", default=1.0, prompt="The ratio for TopP sampling")
 @click.option("--n", default=8, prompt="The number of responses to sample per prompt")
 @click.option("--max_tokens", default=2048, prompt="The number of responses to sample per prompt")
+@click.option("--reward_fn", default="math", prompt="The name of reward function")
+@click.option("--max_sample", default=-1, prompt="Maximum nubmer of samples")
+@click.option("--input_key", nargs=1, default={"problem"}, prompt="Maximum nubmer of samples", multiple=True)
 # @click.option("--stop", default=None, prompt="List of stop words", multiple=True)
 # @click.pass_context
 def main(**kwargs):
@@ -75,10 +74,17 @@ def main(**kwargs):
     configs["stop"] = None
     if configs["stop"] is not None:
         configs["stop"] = list(configs["stop"])
+    if configs["input_key"] is not None:
+        configs["input_key"] = list(configs["input_key"])
 
     assert os.path.exists(configs["prompt_file"]), "The prompt file does not exist"
 
+    REWARD_FN = REWARD_REGISTORY.get(configs["reward_fn"])
+
     dataset = build_dataset(configs["data_path"])
+    if configs["max_sample"] != -1:
+        dataset = dataset.select(range(configs["max_sample"]))
+
     if configs["prompt_file"].endswith(".py"):
         load_constants(configs["prompt_file"])
         template_file = None
@@ -134,7 +140,7 @@ def main(**kwargs):
                     preprocess_data(
                         x,
                         input_template=template_file,
-                        input_key="problem",
+                        input_key=configs["input_key"],
                         apply_chat_template=tokenizer.apply_chat_template,
                     ),
                 )
@@ -150,10 +156,13 @@ def main(**kwargs):
 
     def outputs_generator():
         llm = build_vllm(configs["model_name"])
-        for batch in tqdm(batchifydata(dataset, 10)):
+        for batch in tqdm(batchifydata(dataset, 100)):
             inputs = [x["input"] for x in batch]
             # inputs = batch
             outputs = llm.generate(inputs, sampling_params)
+            import ipdb
+
+            ipdb.set_trace()
             for sample, output in zip(batch, outputs):
                 sample_format_rewards = []
                 sample_math_rewards = []
@@ -163,11 +172,12 @@ def main(**kwargs):
                     response_str = response.text
                     tmp_sample["response"] = response_str
                     tmp_sample["response-id"] = response.index
+                    # tmp_sample['reward'] = REWARD_FN([tmp_sample["gt_answer"]], [response_str])[0]
                     tmp_sample["reward-format"] = format_reward_fn([response_str])[0]
                     tmp_sample["reward-math"] = math_correctness_reward_fn([tmp_sample["gt_answer"]], [response_str])[
                         0
                     ]
-                    tmp_sample["reward-combine"] = combined_reward([tmp_sample["gt_answer"]], [response_str])[0]
+                    tmp_sample["reward-combine"] = REWARD_FN([tmp_sample["gt_answer"]], [response_str])[0]
 
                     sample_format_rewards.append(tmp_sample["reward-format"])
                     sample_math_rewards.append(tmp_sample["reward-math"])

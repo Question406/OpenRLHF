@@ -93,6 +93,24 @@ def convert_test(out_path: str):
     return dataset
 
 
+def covnert_jxhe(origi_path, save_path):
+    original = json.load(open(origi_path))
+
+    def build_sample():
+        for idx, sample in enumerate(original):
+            yield {
+                "problem": sample["question"],
+                "level": sample["level"],
+                "subject": sample["subject"],
+                "gt_answer": sample["gt_answer"],
+                "uid": idx,
+            }
+
+    dataset = Dataset.from_generator(build_sample)
+    dataset.save_to_disk(save_path)
+    return dataset
+
+
 # def filter_level1and2(dataset, out_path):
 # def
 
@@ -103,3 +121,7 @@ def convert_test(out_path: str):
 # extract_balance_subset(dataset, "raw_data/math_train_balanced-200", 200)
 #
 # convert_test("./raw_data/math_test")
+
+covnert_jxhe(
+    "3rdparty/simpleRL-reason/train/data/math_level3to5_data_processed_with_qwen_prompt.json", "raw_data/jxhe_train"
+)
