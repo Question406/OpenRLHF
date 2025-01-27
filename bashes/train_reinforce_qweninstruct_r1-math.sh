@@ -23,7 +23,6 @@ openrlhf.cli.train_ppo \
    --micro_rollout_batch_size 4 \
    --rollout_batch_size 512 \
    --n_samples_per_prompt 1 \
-   --stop_strings "</answer>" \
    --max_epochs 1 \
    --prompt_max_len 1024 \
    --generate_max_len 3000 \
@@ -51,6 +50,7 @@ openrlhf.cli.train_ppo \
    --wandb_group trial-runs-2
 EOF
 
+#    --stop_strings "</answer>" \
 if [[ ${1} != "slurm" ]]; then
     # deepspeed --master_port 52038 --include localhost:2,3 --module $training_commands
     # deepspeed --master_port 52038 --include localhost:2 --module $training_commands

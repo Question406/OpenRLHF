@@ -586,6 +586,7 @@ class RemoteExperienceMaker(NaiveExperienceMaker):
         else:
             value_ref = ray.put(None)
 
+        torch.cuda.empty_cache()
         if self.strategy.args.colocate_actor_ref:
             ray.get([base_action_log_probs_ref])
             ray.get([self.initial_model.empty_cache.remote()])
@@ -594,8 +595,21 @@ class RemoteExperienceMaker(NaiveExperienceMaker):
         r_refs = []
         # support remote RM API with ray
         if not self.remote_rm_url:
-            for rm in self.reward_model:
-                r_refs.append(rm.forward.remote(sequences_cpu, attention_mask_cpu, packed_seq_lens=packed_seq_lens))
+            if self.use_verifiable_reward:
+                queries = self.tokenizer.batch_decode(sequences.cpu(), skip_special_tokens=True)
+                responses = [
+                    query.split(problem_prefix)[-1] for query, problem_prefix in zip(queries, samples.problem_prefix)
+                ]
+                list_r = self.verifiable_reward_fn(samples.gt_answer, responses)
+                # math_reward = math_correctness_reward_fn(samples.gt_answer, responses)
+                # format_reward = format_reward_fn(responses)
+                r = torch.tensor(list_r, device=device)
+                r_refs.append(r)
+            else:
+                for rm in self.reward_model:
+                    r_refs.append(
+                        rm.forward.remote(sequences_cpu, attention_mask_cpu, packed_seq_lens=packed_seq_lens)
+                    )
         else:
             # remote RM
             if not self.packing_samples:
@@ -619,10 +633,17 @@ class RemoteExperienceMaker(NaiveExperienceMaker):
 
         # wait initial/critic/reward model done
         start = time.time()
-        ref_values = ray.get([base_action_log_probs_ref, value_ref] + r_refs)
+        if not self.use_verifiable_reward:
+            ref_values = ray.get([base_action_log_probs_ref, value_ref] + r_refs)
+        else:
+            ref_values = ray.get([base_action_log_probs_ref, value_ref])
         wait_time = time.time() - start
 
-        base_action_log_probs, value, rewards = ref_values[0], ref_values[1], ref_values[2:]
+        if self.use_verifiable_reward:
+            base_action_log_probs, value = ref_values[0], ref_values[1]
+            rewards = r_refs
+        else:
+            base_action_log_probs, value, rewards = ref_values[0], ref_values[1], ref_values[2:]
         base_action_log_probs = base_action_log_probs.to(device)
         if value is not None:
             value = value.to(device)
@@ -663,6 +684,8 @@ class RemoteExperienceMaker(NaiveExperienceMaker):
             "response_length": samples.response_length,
             "total_length": samples.total_length,
             "num_actions": num_actions,
+            # "format_reward": torch.tensor(math_reward, device=r.device),
+            # "math_reward": torch.tensor(format_reward, device=r.device),
         }
 
         if self.strategy.args.perf:
@@ -710,8 +733,19 @@ class RemoteExperienceMaker(NaiveExperienceMaker):
         )
 
         # Expand prompt list based on the number of samples per prompt
-        all_prompts = sum([[prompt] * args.n_samples_per_prompt for prompt in all_prompts], [])
-        all_prompt_token_ids = self.tokenize_fn(all_prompts, self.prompt_max_len, padding=False)["input_ids"]
+        if isinstance(all_prompts, dict):
+            pure_prompts = sum([[prompt] * args.n_samples_per_prompt for prompt in all_prompts["prompt"]], [])
+            all_gt_answers = sum(
+                [[gt_answer] * args.n_samples_per_prompt for gt_answer in all_prompts["gt_answer"]], []
+            )
+            all_prompts = pure_prompts
+            all_prompt_token_ids = self.tokenize_fn(all_prompts, self.prompt_max_len, padding=False)["input_ids"]
+            all_problem_prefixes = self.tokenizer.batch_decode(all_prompt_token_ids, skip_special_tokens=True)
+        else:
+            all_prompts = sum([[prompt] * args.n_samples_per_prompt for prompt in all_prompts], [])
+            all_prompt_token_ids = self.tokenize_fn(all_prompts, self.prompt_max_len, padding=False)["input_ids"]
+            all_gt_answers = None
+            all_problem_prefixes = self.tokenizer.batch_decode(all_prompt_token_ids, skip_special_tokens=True)
 
         # Distribute requests to engines and collect responses to outputs
         all_output_refs = []
@@ -771,6 +805,12 @@ class RemoteExperienceMaker(NaiveExperienceMaker):
                         packed_seq_lens=None,
                         response_length=action_mask.float().sum(dim=-1),
                         total_length=attention_mask.float().sum(dim=-1),
+                        problem_prefix=None
+                        if all_gt_answers is None
+                        else all_problem_prefixes[i : i + self.strategy.args.micro_rollout_batch_size],
+                        gt_answer=None
+                        if all_gt_answers is None
+                        else all_gt_answers[i : i + self.strategy.args.micro_rollout_batch_size],
                     )
                 )
             else:
@@ -808,6 +848,12 @@ class RemoteExperienceMaker(NaiveExperienceMaker):
                         packed_seq_lens=packed_seq_lens,
                         response_length=response_length,
                         total_length=total_length,
+                        problem_prefix=None
+                        if all_gt_answers is None
+                        else all_problem_prefixes[i : i + self.strategy.args.micro_rollout_batch_size],
+                        gt_answer=None
+                        if all_gt_answers is None
+                        else all_gt_answers[i : i + self.strategy.args.micro_rollout_batch_size],
                     )
                 )
         return samples_list

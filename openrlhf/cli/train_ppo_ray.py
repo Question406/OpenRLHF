@@ -2,8 +2,10 @@ import argparse
 from datetime import datetime
 from typing import List
 
+import os
 import ray
 import torch
+import importlib
 from ray.util.placement_group import placement_group
 
 from openrlhf.trainer.ray import (
@@ -15,6 +17,9 @@ from openrlhf.trainer.ray import (
     create_vllm_engines,
 )
 from openrlhf.utils import get_strategy
+from openrlhf.utils.logging_utils import init_logger
+
+LOGGER = init_logger(__name__)
 
 
 # NOTE: reward function for multiple reward models, replace this with your own function!
@@ -90,7 +95,7 @@ def train(args):
 
     # if colocated, create placement group for critic and reward model explicitly.
     pg = None
-    if args.critic_pretrain and args.colocate_critic_reward:
+    if args.critic_pretrain and args.colocate_critic_reward and args.reward_pretrain:
         assert (
             args.critic_num_nodes == args.reward_num_nodes
             and args.critic_num_gpus_per_node == args.reward_num_gpus_per_node
@@ -115,7 +120,7 @@ def train(args):
         critic_model = None
 
     # multiple reward models
-    if not args.remote_rm_url:
+    if not args.remote_rm_url and args.reward_pretrain:
         reward_pretrains = args.reward_pretrain.split(",")
         reward_models = []
         for _ in reward_pretrains:
@@ -135,9 +140,16 @@ def train(args):
     refs = []
     refs.extend(ref_model.async_init_model_from_pretrained(strategy, args.pretrain))
     refs.extend(actor_model.async_init_model_from_pretrained(strategy, args.pretrain))
-    if not args.remote_rm_url:
+    if not args.remote_rm_url and args.reward_pretrain:
         for reward_model, reward_pretrain in zip(reward_models, reward_pretrains):
             refs.extend(reward_model.async_init_model_from_pretrained(strategy, reward_pretrain))
+
+    if args.critic_pretrain:
+        # critic scheduler initialization depends on max_step, so we have to init critic after actor
+        # TODO: use first reward model as critic model
+        max_steps = ray.get(actor_model._actor_handlers[0].max_steps.remote())
+        refs.extend(critic_model.async_init_model_from_pretrained(strategy, args.critic_pretrain, max_steps))
+        ray.get(refs)
 
     # init vLLM engine for text generation
     vllm_engines = None
@@ -155,13 +167,7 @@ def train(args):
 
     ray.get(refs)
 
-    if args.critic_pretrain:
-        # critic scheduler initialization depends on max_step, so we have to init critic after actor
-        # TODO: use first reward model as critic model
-        max_steps = ray.get(actor_model._actor_handlers[0].max_steps.remote())
-        refs.extend(critic_model.async_init_model_from_pretrained(strategy, args.critic_pretrain, max_steps))
-        ray.get(refs)
-
+    LOGGER.info("Start training PPO with Ray")
     # train actor and critic mdoel
     refs = actor_model.async_fit_actor_model(
         critic_model, ref_model, reward_models, args.remote_rm_url, reward_fn=reward_fn, vllm_engines=vllm_engines
@@ -298,6 +304,18 @@ if __name__ == "__main__":
     parser.add_argument("--aux_loss_coef", type=float, default=0, help="MoE balancing loss")
     parser.add_argument("--adam_betas", type=float, nargs=2, default=(0.9, 0.95), help="Betas for Adam optimizer")
     parser.add_argument("--reward_clip_range", type=float, nargs=2, default=(-10, 10), help="Reward clip range")
+    parser.add_argument(
+        "--use_verifiable_reward", action="store_true", default=False, help="Use verifiable reward for coding/math"
+    )
+    parser.add_argument(
+        "--verifiable_reward_fn",
+        type=str,
+        default="math",
+        help="The name of the reward function, find the full list in reward_fns.py",
+    )
+    parser.add_argument(
+        "--answer_key", type=str, default=None, help="Key for ground truth answer in dataset for verifiable reward"
+    )
 
     # Reinforce
     parser.add_argument(
@@ -334,8 +352,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--pretrain_split", type=str, default="train")
 
-    parser.add_argument("--input_key", type=str, default="input", help="JSON dataset key")
+    parser.add_argument("--input_key", nargs="*", default=["problem"], help="JSON dataset key")
     parser.add_argument("--input_template", type=str, default=None)
+    parser.add_argument("--input_template_file", type=str, default=None)
     parser.add_argument(
         "--apply_chat_template", action="store_true", default=False, help="Use HF tokenizer chat template"
     )
@@ -386,6 +405,37 @@ if __name__ == "__main__":
             "[Warning] input_template contains \\n chracters instead of newline. "
             "You likely want to pass $'\\n' in Bash or \"`n\" in PowerShell."
         )
+
+    if args.input_template_file is not None:
+        assert os.path.exists(args.input_template_file), (
+            f"Provided input_template_file {args.input_template_file} not found"
+        )
+        # LOGGER.info("Current folder is %s", os.getcwd())
+        # LOGGER.info("ls in ./templates" + str(os.listdir("./templates")))
+        # if ""
+        if args.input_template_file.endswith(".txt"):
+            args.input_template = open(args.input_template_file).read().strip()
+            LOGGER.info(f"Loaded input template from {args.input_template_file}")
+            LOGGER.info("Prompt is %s", args.input_template)
+        elif args.input_template_file.endswith(".py"):
+            # load_constants(args.input_template_file)
+            file_path = args.input_template_file
+            module_name = os.path.splitext(os.path.basename(file_path))[0]
+            spec = importlib.util.spec_from_file_location(module_name, file_path)
+            if spec is None:
+                raise ImportError(f"Could not load spec for module from {file_path}")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            args.input_template = vars(module)["MESSAGE_TEMPLATE"]
+            LOGGER.info(f"Loaded input template from {args.input_template_file}")
+        else:
+            raise ValueError("Unsupported input_template file")
+
+    assert not (args.use_verifiable_reward and args.reward_pretrain), (
+        "Cannot use verifiable reward with reward pretrain"
+    )
+
+    assert not (args.use_verifiable_reward and args.answer_key is None), "answer_key is required for verifiable reward"
 
     if args.packing_samples:
         if not args.flash_attn:

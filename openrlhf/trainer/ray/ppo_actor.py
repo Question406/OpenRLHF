@@ -10,7 +10,7 @@ import torch
 import torch.distributed
 from transformers.trainer import get_scheduler
 
-from openrlhf.datasets import PromptDataset, SFTDataset
+from openrlhf.datasets import PromptDataset, SFTDataset, PromptDatasetWithGT
 from openrlhf.models import Actor
 from openrlhf.trainer import PPOTrainer
 from openrlhf.trainer.ppo_utils import Experience, RemoteExperienceMaker
@@ -54,6 +54,8 @@ class ActorPPOTrainer(PPOTrainer):
             self.reward_fn,
             vllm_engines=self.vllm_engines,
             packing_samples=self.strategy.args.packing_samples,
+            use_verifiable_reward=self.strategy.args.use_verifiable_reward,
+            verifiable_reward_fn=self.strategy.args.verifiable_reward_fn,
         )
 
         # Create torch group with deepspeed rank 0 and all vllm ranks
@@ -292,9 +294,17 @@ class ActorModelRayActor(BasePPORole):
             train_split=args.prompt_split,
         )
         prompts_data = prompts_data.select(range(min(args.max_samples, len(prompts_data))))
-        self.prompts_dataset = PromptDataset(
-            prompts_data, self.tokenizer, strategy, input_template=args.input_template
-        )
+        if args.use_verifiable_reward:
+            print(self.tokenizer)
+            print(args.input_template)
+            print(prompts_data)
+            self.prompts_dataset = PromptDatasetWithGT(
+                prompts_data, self.tokenizer, strategy, input_template=args.input_template
+            )
+        else:
+            self.prompts_dataset = PromptDataset(
+                prompts_data, self.tokenizer, strategy, input_template=args.input_template
+            )
         self.prompts_dataloader = strategy.setup_dataloader(
             self.prompts_dataset, args.rollout_batch_size // strategy.world_size, True, True
         )
@@ -395,11 +405,13 @@ class ActorModelRayActor(BasePPORole):
             eos_token_id=self.tokenizer.eos_token_id,
             save_hf_ckpt=args.save_hf_ckpt,
             disable_ds_ckpt=args.disable_ds_ckpt,
+            use_verifiable_reward=args.use_verifiable_reward,
+            verifiable_reward_fn=args.verifiable_reward_fn,
         )
 
         # broadcast checkpoint
         ckpt_path = os.path.join(args.ckpt_path, "_actor")
-        if args.load_checkpoint and os.path.exists(ckpt_path) and not vllm_engines is None:
+        if args.load_checkpoint and os.path.exists(ckpt_path) and vllm_engines is not None:
             torch.distributed.barrier()
             trainer._broadcast_to_vllm()
 

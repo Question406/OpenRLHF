@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 
 from openrlhf.utils.utils import convert_token_to_id
-from .utils import zero_pad_sequences
+from openrlhf.datasets.utils import zero_pad_sequences
 
 
 class ProcessRewardDataset(Dataset):

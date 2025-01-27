@@ -25,7 +25,7 @@ SAVE_PATH="./checkpoint/qwen2.5-1.5B_coutndown"
 #    --max_epochs 1 \
 #    --prompt_max_len 256 \
 #    --generate_max_len 2048 \
-#    --zero_stage 2 \
+#    --zero_stage 2 256 \
 #    --bf16 \
 #    --actor_learning_rate 5e-7 \
 #    --critic_learning_rate 9e-6 \

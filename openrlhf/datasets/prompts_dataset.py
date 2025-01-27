@@ -52,14 +52,17 @@ def load_constants(file_path, **kwargs):
 def preprocess_data(data, input_template=None, input_key: List[str] = ["problem"], apply_chat_template=None) -> str:
     needed_inputs = {k: data[k] for k in input_key}
     if apply_chat_template:
+        # print("MESSAGE_TEMPLATE: ", MESSAGE_TEMPLATE)
+        # if MESSAGE_TEMPLATE is None:
+        # MESSAGE_TEMPLATE = input_template
         # problem = data[input_key]
-        if MESSAGE_TEMPLATE is None:
-            # Use the default templaet
-            # if isinstance(problem, str):
-            # chat = [{"role": "user", "content": problem}]
-            chat = {"role": "user", "content": data[input_key[0]]}
-        else:
-            chat = apply_prompt(MESSAGE_TEMPLATE, replace_dict=needed_inputs)
+        # if MESSAGE_TEMPLATE is None:
+        # Use the default templaet
+        # if isinstance(problem, str):
+        # chat = [{"role": "user", "content": problem}]
+        # chat = {"role": "user", "content": data[input_key[0]]}
+        # else:
+        chat = apply_prompt(input_template, replace_dict=needed_inputs)
         prompt = apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
     else:
         # prompt = data[input_key]

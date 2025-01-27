@@ -13,6 +13,7 @@ from openrlhf.utils.deepspeed import DeepspeedStrategy
 
 from openrlhf.trainer.ray.utils import ray_noset_visible_devices
 
+
 class DistributedTorchRayActor:
     def __init__(self, world_size, rank, master_addr, master_port):
         logging.basicConfig(
@@ -280,7 +281,7 @@ class PPORayActorGroup:
             initial_actor = initial_actors[i % len(initial_actors)]
 
             reward_actors = []
-            if not remote_rm_urls:
+            if not remote_rm_urls and reward_model_groups is not None:
                 for reward_model_group in reward_model_groups:
                     actors = reward_model_group._actor_handlers
                     reward_actors.append(actors[i % len(actors)])
