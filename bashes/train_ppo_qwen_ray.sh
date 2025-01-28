@@ -58,7 +58,8 @@ ray job submit --address="http://127.0.0.1:8265" \
    --gradient_checkpointing \
    --load_checkpoint \
    --wandb_group jxheprompt \
-   --use_wandb $WANDBKEY
+   --use_wandb $WANDBKEY \
+   --wandb_project ray_trialrun_ppo
 
    # --packing_samples \
 # Full
